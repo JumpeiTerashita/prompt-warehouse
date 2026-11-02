@@ -1,0 +1,1913 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>プロンプト倉庫</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='3' y='3' width='10' height='10' fill='%23b8336a' transform='rotate(45 8 8)'/%3E%3C/svg%3E">
+<style>
+/* Prompt Warehouse - accent-ladder (Taste app sheet, seed 587108823)
+   Face: the generated images themselves are the product's objects and fill the lead.
+   Ground is shifted one level toward the accent's palest tint so page and tints read as one family.
+   Typeface: the sheet's DM Sans is replaced by the system stack because the app must work offline. */
+:root {
+  --ground: #fbf7f8;
+  --surface: #ffffff;
+  --raised: #f6eef1;
+  --border: #e8dde1;
+  --rule: #f1e6ea;
+  --control: #d8c6cd;
+  --text: #111827;
+  --muted: #5f6672;
+  --accent: #b8336a;
+  --accent-soft: #fdf2f7;
+  --accent-track: #f8dbe8;
+  --accent-ink: #6b1d3e;
+  --negative: #c4242a;
+  --radius-card: 8px;
+  --radius-control: 6px;
+  --sidebar-width: 232px;
+  --detail-width: 400px;
+  --gap: 24px;
+  --control-height: 34px;
+  --fs-title: 28px;
+  --fs-section: 15px;
+  --fs-body: 14px;
+  --fs-small: 12px;
+  font-family: "Segoe UI", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", Meiryo, system-ui, sans-serif;
+}
+[data-theme="dark"] {
+  --ground: #000000;
+  --surface: #111111;
+  --raised: #1c1c1c;
+  --border: #2a2a2a;
+  --rule: #1e1e1e;
+  --control: #3a3a3a;
+  --text: #f3f4f6;
+  --muted: #a7adb6;
+  --accent-soft: #2a1420;
+  --accent-track: #4a2136;
+  --accent-ink: #f3b8d2;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; padding: 0; }
+body { background: var(--ground); color: var(--text); font-size: var(--fs-body); line-height: 1.55; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+#app { display: flex; min-height: 100vh; }
+
+/* Sidebar (open plane, on the ground) */
+#sidebar { width: var(--sidebar-width); flex: 0 0 var(--sidebar-width); padding: 28px 16px 20px 24px; display: flex; flex-direction: column; gap: 28px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+.brand { display: flex; gap: 10px; align-items: center; }
+.brand-mark { width: 14px; height: 14px; background: var(--accent); transform: rotate(45deg); flex: 0 0 14px; }
+.brand-name { margin: 0; font-weight: 700; font-size: 16px; }
+.brand-count { margin: 0; color: var(--muted); font-size: var(--fs-small); font-variant-numeric: tabular-nums; }
+.side-nav { display: flex; flex-direction: column; gap: 2px; }
+.nav-row { display: flex; justify-content: space-between; align-items: center; height: 32px; padding: 0 10px; border: 0; background: transparent; border-radius: var(--radius-control); text-align: left; }
+.nav-row:hover { background: var(--raised); }
+.nav-row.is-active { background: var(--accent-track); color: var(--accent-ink); font-weight: 600; }
+.nav-count { color: var(--muted); font-size: var(--fs-small); font-variant-numeric: tabular-nums; }
+.nav-row.is-active .nav-count { color: var(--accent-ink); }
+.side-section-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.side-head-actions { display: inline-flex; align-items: center; gap: 8px; }
+.tags-toggle { border: 0; background: transparent; padding: 4px; color: var(--muted); display: inline-flex; }
+.tags-toggle svg { transition: transform 0.15s ease; }
+.tags-toggle[aria-expanded="false"] svg { transform: rotate(-90deg); }
+.side-section h2 { font-size: 13px; font-weight: 600; color: var(--muted); margin: 0 0 10px; }
+.toggle-label { font-size: var(--fs-small); color: var(--muted); display: flex; gap: 4px; align-items: center; white-space: nowrap; }
+.tag-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.tag-list button { display: flex; justify-content: space-between; width: 100%; padding: 3px 10px; border: 0; background: transparent; border-radius: var(--radius-control); text-align: left; gap: 8px; }
+.tag-list button:hover { background: var(--raised); }
+.tag-list .tag-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tag-list .tag-count { color: var(--muted); font-size: var(--fs-small); font-variant-numeric: tabular-nums; }
+.tag-list button.is-active { background: var(--accent-track); color: var(--accent-ink); }
+.side-foot { margin-top: auto; display: flex; flex-direction: column; gap: 6px; }
+.side-action { border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius-control); height: 32px; text-align: center; }
+.side-action:hover { background: var(--raised); }
+.side-note { color: var(--muted); font-size: var(--fs-small); margin: 6px 0 0; }
+
+/* Canvas */
+#canvas { flex: 1 1 auto; min-width: 0; padding: 32px var(--gap) 64px; }
+.title-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.title-row h1 { font-size: var(--fs-title); margin: 0; line-height: 1.2; }
+.finding { color: var(--muted); margin: 6px 0 0; }
+.title-actions { display: flex; gap: 8px; flex: 0 0 auto; }
+.btn { border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius-control); min-height: var(--control-height); padding: 0 14px; }
+.btn:hover { background: var(--raised); }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.btn-primary:hover { background: var(--accent-ink); }
+.btn-small { min-height: 28px; padding: 0 10px; font-size: var(--fs-small); }
+.btn-danger { color: var(--negative); }
+.btn:active { transform: translateY(1px); }
+
+.storage-notice { margin-top: 18px; background: var(--accent-soft); border: 1px solid var(--accent-track); color: var(--accent-ink); border-radius: var(--radius-control); padding: 10px 14px; font-size: var(--fs-small); }
+.filter-row { display: flex; gap: 10px; margin-top: 22px; }
+#searchInput { flex: 1 1 auto; height: 38px; border: 1px solid var(--control); border-radius: var(--radius-control); background: var(--surface); padding: 0 12px; min-width: 0; }
+#sortSelect { height: 38px; border: 1px solid var(--control); border-radius: var(--radius-control); background: var(--surface); padding: 0 8px; }
+.active-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+.active-tags .chip { background: var(--accent); color: #fff; border: 0; border-radius: 999px; padding: 3px 10px; font-size: var(--fs-small); }
+.import-progress { margin-top: 14px; }
+.import-progress-bar { height: 6px; background: var(--accent-track); border-radius: 3px; overflow: hidden; }
+.import-progress-bar span { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.2s ease; }
+.import-progress p { margin: 6px 0 0; color: var(--muted); font-size: var(--fs-small); }
+
+/* Grid and cards */
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 18px; margin-top: 20px; }
+.card { background: var(--surface); border-radius: var(--radius-card); overflow: hidden; display: flex; flex-direction: column; text-align: left; border: 0; padding: 0; width: 100%; }
+.card:hover { background: var(--accent-soft); }
+.card.is-selected { outline: 2px solid var(--accent); outline-offset: -2px; }
+.card-thumb { aspect-ratio: 4 / 3; background: var(--raised); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.card-thumb img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 18%; display: block; }
+.card-thumb .no-image { color: var(--muted); font-size: var(--fs-small); padding: 12px; }
+.card-body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 7px; }
+.card-title-row { display: flex; align-items: flex-start; gap: 6px; }
+.card-star { border: 0; background: transparent; padding: 0; font-size: 16px; line-height: 1.3; color: var(--muted); flex: 0 0 auto; }
+.card-star.is-on { color: var(--accent); }
+.card-title { font-weight: 600; overflow-wrap: anywhere; }
+.card-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+.pill { background: var(--raised); border: 0; border-radius: 999px; padding: 2px 9px; font-size: var(--fs-small); color: var(--text); }
+.pill-auto { color: var(--muted); }
+.pill-lora { background: var(--accent-soft); color: var(--accent-ink); }
+.card-prompt { color: var(--muted); font-size: var(--fs-small); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; margin: 0; }
+.card-meta { color: var(--muted); font-size: var(--fs-small); display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; }
+.empty { margin-top: 48px; max-width: 560px; }
+#emptyState { max-width: none; border: 2px dashed var(--accent-track); border-radius: var(--radius-card); padding: 64px 32px; text-align: center; background: var(--accent-soft); }
+#emptyState p { max-width: 560px; margin-left: auto; margin-right: auto; }
+#noResultState { max-width: none; text-align: center; padding: 40px 0; }
+.empty-title { font-size: var(--fs-section); font-weight: 700; margin: 0 0 8px; }
+.empty p { color: var(--muted); }
+.more-btn { display: block; margin: 28px auto 0; }
+
+/* Detail */
+.detail { width: var(--detail-width); flex: 0 0 var(--detail-width); background: var(--surface); border-left: 1px solid var(--border); position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+.detail-head { display: flex; justify-content: space-between; align-items: center; padding: 18px 20px 6px; }
+.detail-head h2 { font-size: var(--fs-section); margin: 0; }
+.icon-btn { border: 0; background: transparent; font-size: 20px; line-height: 1; padding: 4px 8px; }
+.detail-body { padding: 8px 20px 28px; display: flex; flex-direction: column; gap: 14px; }
+.detail-image img { width: 100%; border-radius: var(--radius-card); display: block; }
+.detail-image .no-image { background: var(--raised); border-radius: var(--radius-card); padding: 32px 16px; text-align: center; color: var(--muted); }
+.detail-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.field { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-small); color: var(--muted); }
+.field input, .field textarea, .prompt-block textarea { border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface); padding: 7px 9px; color: var(--text); width: 100%; resize: vertical; }
+.prompt-block { display: flex; flex-direction: column; gap: 5px; }
+.prompt-head { display: flex; justify-content: space-between; align-items: center; }
+.prompt-head h3, .detail-sub { font-size: 13px; font-weight: 600; margin: 0; }
+.gen-info { display: grid; grid-template-columns: 96px 1fr; row-gap: 5px; margin: 0; font-size: var(--fs-small); }
+.gen-info dt { color: var(--muted); }
+.gen-info dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.unconnected-list { margin: 0; padding-left: 18px; color: var(--muted); font-size: var(--fs-small); }
+.save-btn { width: 100%; }
+
+#dropOverlay { position: fixed; inset: 0; background: var(--accent-soft); border: 3px dashed var(--accent); display: flex; align-items: center; justify-content: center; z-index: 40; pointer-events: none; }
+#dropOverlay p { font-size: 22px; font-weight: 700; color: var(--accent-ink); }
+#toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); background: var(--text); color: var(--ground); padding: 9px 18px; border-radius: 999px; z-index: 50; font-size: var(--fs-small); }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}
+@media (max-width: 900px) {
+  #app { flex-direction: column; }
+  #sidebar { width: 100%; flex: none; height: auto; position: static; padding: 16px; gap: 14px; }
+  .side-foot { margin-top: 0; }
+  .tag-list { flex-direction: row; flex-wrap: wrap; gap: 4px; }
+  .tag-list button { width: auto; }
+  #canvas { padding: 20px 16px 48px; }
+  .grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .detail { width: 100%; flex: none; position: fixed; inset: 0; height: 100dvh; z-index: 30; border-left: 0; }
+  .title-row { flex-direction: column; }
+}
+
+.seg { display: flex; border: 1px solid var(--border); border-radius: var(--radius-control); overflow: hidden; }
+.seg-btn { flex: 1 1 50%; border: 0; background: var(--surface); height: 32px; font-size: var(--fs-small); }
+.seg-btn.is-active { background: var(--accent-track); color: var(--accent-ink); font-weight: 600; }
+.drive-status { font-size: var(--fs-small); color: var(--muted); margin: 10px 0 6px; }
+.drive-settings { margin-top: 10px; font-size: var(--fs-small); }
+.drive-settings summary { cursor: pointer; color: var(--muted); }
+.drive-settings .field { margin-top: 8px; }
+.drive-settings .side-action { margin-top: 6px; width: 100%; }
+
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="sidebar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div>
+        <p class="brand-name">プロンプト倉庫</p>
+        <p class="brand-count"><span id="totalCount">0</span> items</p>
+      </div>
+    </div>
+
+    <nav class="side-nav" aria-label="絞り込み">
+      <button class="nav-row is-active" data-filter="all" type="button"><span>すべて</span><span class="nav-count" id="countAll">0</span></button>
+      <button class="nav-row" data-filter="favorite" type="button"><span>お気に入り</span><span class="nav-count" id="countFav">0</span></button>
+      <button class="nav-row" data-filter="imageonly" type="button"><span>画像だけの登録</span><span class="nav-count" id="countImageOnly">0</span></button>
+      <button class="nav-row" data-filter="comfy" type="button"><span>ComfyUI</span><span class="nav-count" id="countComfy">0</span></button>
+      <button class="nav-row" data-filter="a1111" type="button"><span>A1111</span><span class="nav-count" id="countA1111">0</span></button>
+    </nav>
+
+    <div class="side-section">
+      <div class="side-section-head">
+        <h2>人気のタグ</h2>
+        <span class="side-head-actions">
+          <label class="toggle-label"><input type="checkbox" id="qualityToggle"> 品質系を除く</label>
+          <button id="tagsToggle" class="tags-toggle" type="button" aria-expanded="true" aria-controls="popularTags" title="タグ一覧を開く／閉じる"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M5 9l7 7 7-7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        </span>
+      </div>
+      <ul id="popularTags" class="tag-list"></ul>
+    </div>
+
+    <div class="side-section">
+      <h2>保存先</h2>
+      <div class="seg" role="group" aria-label="保存先の切替">
+        <button id="modeLocalBtn" class="seg-btn is-active" type="button">このブラウザ</button>
+        <button id="modeDriveBtn" class="seg-btn" type="button">Googleドライブ</button>
+      </div>
+      <div id="drivePanel" hidden>
+        <p id="driveStatus" class="drive-status">ドライブ未接続</p>
+        <button id="driveSignInBtn" class="side-action" type="button">Googleでサインイン</button>
+        <details class="drive-settings">
+          <summary>ドライブ設定（クライアントID）</summary>
+          <label class="field"><span>OAuth クライアントID</span><input id="driveClientId" type="text" placeholder="xxxx.apps.googleusercontent.com"></label>
+          <button id="driveClientSaveBtn" class="side-action" type="button">クライアントIDを保存</button>
+          <p class="side-note">クライアントIDは公開情報です（秘密鍵ではありません）。端末ごとに1回だけ設定します。</p>
+        </details>
+      </div>
+    </div>
+
+    <div class="side-foot">
+      <button id="exportBtn" class="side-action" type="button">エクスポート（軽量JSON）</button>
+      <button id="fullExportBtn" class="side-action" type="button">フルバックアップ（画像込みZIP）</button>
+      <button id="importJsonBtn" class="side-action" type="button">バックアップ／JSONを取り込む</button>
+      <button id="themeBtn" class="side-action" type="button">ダークモード切替</button>
+      <p class="side-note">データはこのブラウザの IndexedDB に保存されます。画像を含む引っ越しには元の画像ファイルが別途必要です。</p>
+    </div>
+  </aside>
+
+  <main id="canvas">
+    <header class="title-row">
+      <div>
+        <h1>ギャラリー</h1>
+        <p class="finding" id="findingLine">画像を放り込むと、メタ情報からプロンプトが自動で登録されます。</p>
+      </div>
+      <div class="title-actions">
+        <button id="templateBtn" class="btn" type="button">＋ プロンプトだけ登録</button>
+        <button id="importBtn" class="btn btn-primary" type="button">画像を取り込む</button>
+      </div>
+    </header>
+
+    <div id="storageNotice" class="storage-notice" hidden>
+      いま開いている環境では、ブラウザの保存領域がブロックされているため、登録はこの表示を閉じるまでの仮保存になります。ファイルをダウンロードしてブラウザで直接開くと、登録が残ります。
+    </div>
+    <div class="filter-row">
+      <input id="searchInput" type="search" placeholder="プロンプト、ファイル名、タイトルから検索..." aria-label="検索">
+      <select id="sortSelect" aria-label="並び替え">
+        <option value="new">新しい順</option>
+        <option value="old">古い順</option>
+        <option value="title">タイトル順</option>
+      </select>
+    </div>
+    <div id="activeTags" class="active-tags" hidden></div>
+    <div id="importProgress" class="import-progress" hidden>
+      <div class="import-progress-bar"><span id="importProgressFill"></span></div>
+      <p id="importProgressText"></p>
+    </div>
+
+    <section id="grid" class="grid" aria-label="登録済みプロンプト"></section>
+    <div id="emptyState" class="empty" hidden>
+      <p class="empty-title">まだ登録がありません</p>
+      <p>ComfyUI や A1111 で生成した PNG を、この画面にドラッグ＆ドロップしてください。メタ情報のある画像はプロンプトが自動で入力されます。メタ情報がない画像は、画像だけのカードとして登録されます。</p>
+      <button class="btn btn-primary" id="emptyImportBtn" type="button">画像を取り込む</button>
+    </div>
+    <div id="noResultState" class="empty" hidden>
+      <p class="empty-title">条件に合うものがありません</p>
+      <p>検索語やタグの絞り込みを変えてみてください。</p>
+    </div>
+    <button id="moreBtn" class="btn more-btn" type="button" hidden>もっと表示</button>
+  </main>
+
+  <aside id="detail" class="detail" hidden aria-label="画像の詳細">
+    <div class="detail-head">
+      <h2>画像の詳細</h2>
+      <button id="detailClose" class="icon-btn" type="button" aria-label="詳細を閉じる">×</button>
+    </div>
+    <div class="detail-body">
+      <div id="detailImageWrap" class="detail-image"></div>
+      <div class="detail-actions">
+        <button id="copyImageBtn" class="btn" type="button">画像コピー</button>
+        <button id="downloadWorkflowBtn" class="btn" type="button">workflow.json</button>
+        <button id="favBtn" class="btn" type="button"><svg class="star-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M12 2.5l2.95 6.35 6.95.82-5.13 4.73 1.38 6.85L12 17.77l-6.15 3.48 1.38-6.85L2.1 9.67l6.95-.82z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg> お気に入り</button>
+        <button id="deleteBtn" class="btn btn-danger" type="button">削除</button>
+      </div>
+
+      <label class="field"><span>タイトル</span><input id="editTitle" type="text"></label>
+      <label class="field"><span>タグ（カンマ区切り）</span><input id="editTags" type="text"></label>
+      <label class="field"><span>メモ</span><textarea id="editMemo" rows="2"></textarea></label>
+
+      <div class="prompt-block">
+        <div class="prompt-head"><h3>ポジティブプロンプト</h3><button class="btn btn-small" id="copyPositiveBtn" type="button">コピー</button></div>
+        <textarea id="editPositive" rows="6"></textarea>
+      </div>
+      <div class="prompt-block">
+        <div class="prompt-head"><h3>ネガティブプロンプト</h3><button class="btn btn-small" id="copyNegativeBtn" type="button">コピー</button></div>
+        <textarea id="editNegative" rows="4"></textarea>
+      </div>
+      <div class="prompt-block">
+        <div class="prompt-head"><h3>生成情報つき全文</h3><button class="btn btn-small" id="copyFullBtn" type="button">コピー</button></div>
+      </div>
+
+      <h3 class="detail-sub">生成情報</h3>
+      <dl id="genInfo" class="gen-info"></dl>
+      <div id="unconnectedWrap" hidden>
+        <h3 class="detail-sub">未接続のノード（この生成では未使用）</h3>
+        <ul id="unconnectedList" class="unconnected-list"></ul>
+      </div>
+      <button id="saveEditBtn" class="btn btn-primary save-btn" type="button">編集を保存</button>
+    </div>
+  </aside>
+</div>
+
+<div id="dropOverlay" hidden><p>離して取り込み</p></div>
+<div id="toast" role="status" aria-live="polite" hidden></div>
+<input id="fileInput" type="file" accept="image/png,image/jpeg,image/webp" multiple hidden>
+<input id="jsonInput" type="file" accept=".json,.zip,application/json,application/zip" hidden>
+
+<script>
+/* Prompt Warehouse parser (stage-0 validated rules, 2026-11-02)
+   - PNG text chunks: tEXt / zTXt / iTXt, no external libraries
+   - ComfyUI: trace links from the primary sampler (DFS for conditioning,
+     chain tracing for model/LoRA). Never scan-all for model/LoRA:
+     dangling nodes on the canvas are NOT used (proven on real samples).
+   - seed / noise_seed are kept as strings so large values never lose digits.
+*/
+(function (global) {
+  'use strict';
+
+  var PNG_SIG = [137, 80, 78, 71, 13, 10, 26, 10];
+
+  function isPng(buffer) {
+    if (buffer.byteLength < 8) return false;
+    var b = new Uint8Array(buffer, 0, 8);
+    for (var i = 0; i < 8; i++) if (b[i] !== PNG_SIG[i]) return false;
+    return true;
+  }
+
+  function inflate(bytes, format) {
+    return new Promise(function (resolve, reject) {
+      try {
+        var stream = new DecompressionStream(format);
+        var decompressed = new Blob([bytes]).stream().pipeThrough(stream);
+        new Response(decompressed).arrayBuffer().then(function (buf) { resolve(new Uint8Array(buf)); }, reject);
+      } catch (e) { reject(e); }
+    });
+  }
+
+  // zTXt payload is a zlib stream (RFC 1950). Primary: 'deflate'.
+  // Fallback (environment differences): strip 2-byte header + 4-byte Adler-32 and try 'deflate-raw'.
+  function inflateZlib(bytes) {
+    return inflate(bytes, 'deflate').catch(function () {
+      if (bytes.length > 6) {
+        return inflate(bytes.subarray(2, bytes.length - 4), 'deflate-raw');
+      }
+      throw new Error('zTXt decompress failed');
+    });
+  }
+
+  function splitNull(bytes, maxParts) {
+    var parts = [], start = 0;
+    for (var i = 0; i < bytes.length && parts.length < maxParts - 1; i++) {
+      if (bytes[i] === 0) { parts.push(bytes.subarray(start, i)); start = i + 1; }
+    }
+    parts.push(bytes.subarray(start));
+    return parts;
+  }
+
+  var utf8 = new TextDecoder('utf-8', { fatal: false });
+  var latin1 = new TextDecoder('iso-8859-1');
+
+  function parsePngTexts(buffer) {
+    var view = new DataView(buffer);
+    var bytes = new Uint8Array(buffer);
+    var texts = {};
+    var pos = 8;
+    while (pos + 8 <= buffer.byteLength) {
+      var length = view.getUint32(pos, false);
+      var type = String.fromCharCode(bytes[pos + 4], bytes[pos + 5], bytes[pos + 6], bytes[pos + 7]);
+      var dataStart = pos + 8;
+      var dataEnd = Math.min(dataStart + length, buffer.byteLength);
+      var data = bytes.subarray(dataStart, dataEnd);
+      if (type === 'tEXt') {
+        var idx = data.indexOf(0);
+        if (idx > 0) {
+          var key = latin1.decode(data.subarray(0, idx));
+          texts[key] = utf8.decode(data.subarray(idx + 1));
+        }
+      } else if (type === 'zTXt' || type === 'iTXt') {
+        texts.__pending = texts.__pending || [];
+        texts.__pending.push({ type: type, data: data.slice() });
+      }
+      pos = dataEnd + 4;
+      if (type === 'IEND') break;
+    }
+    var pending = texts.__pending || [];
+    delete texts.__pending;
+    var chain = Promise.resolve();
+    pending.forEach(function (p) {
+      chain = chain.then(function () {
+        if (p.type === 'zTXt') {
+          var idx = p.data.indexOf(0);
+          if (idx <= 0) return;
+          var key = latin1.decode(p.data.subarray(0, idx));
+          return inflateZlib(p.data.subarray(idx + 2)).then(function (out) {
+            texts[key] = utf8.decode(out);
+          }).catch(function () { /* leave unset; caller registers as no-metadata */ });
+        }
+        // iTXt: keyword \0 compFlag \0 compMethod \0 lang \0 translated \0 text
+        var parts = splitNull(p.data, 6);
+        if (parts.length < 6) return;
+        var ikey = latin1.decode(parts[0]);
+        var compFlag = parts[1].length ? parts[1][0] : 0;
+        var raw = parts[5];
+        if (compFlag === 1) {
+          return inflateZlib(raw).then(function (out) { texts[ikey] = utf8.decode(out); }).catch(function () {});
+        }
+        texts[ikey] = utf8.decode(raw);
+      });
+    });
+    return chain.then(function () { return texts; });
+  }
+
+  // Protect large seed integers from JSON.parse rounding: quote seed/noise_seed
+  // values with 16+ digits before parsing.
+  function protectSeeds(jsonText) {
+    return jsonText.replace(/"(seed|noise_seed)"\s*:\s*(\d{16,})/g, '"$1":"$2"');
+  }
+
+  function isLink(v) {
+    return Array.isArray(v) && v.length === 2 && (typeof v[0] === 'string' || typeof v[0] === 'number');
+  }
+
+  function resolveTextInput(prompt, node) {
+    var t = (node.inputs || {}).text;
+    if (typeof t === 'string') return t;
+    if (isLink(t)) {
+      var src = prompt[String(t[0])];
+      if (src) {
+        var si = src.inputs || {};
+        var keys = ['value', 'text', 'string'];
+        for (var i = 0; i < keys.length; i++) {
+          if (typeof si[keys[i]] === 'string') return si[keys[i]];
+        }
+      }
+    }
+    return null;
+  }
+
+  // DFS from a conditioning link to CLIPTextEncode text.
+  // Intermediate conditioning nodes are followed; clip/model/latent inputs are not.
+  function resolveConditioning(prompt, nodeId, visited, depth) {
+    visited = visited || {};
+    depth = depth || 0;
+    if (depth > 30) return [];
+    var key = String(nodeId);
+    if (visited[key]) return [];
+    visited[key] = true;
+    var node = prompt[key];
+    if (!node) return [];
+    var ct = node.class_type || '';
+    if (ct.indexOf('CLIPTextEncode') !== -1) {
+      var text = resolveTextInput(prompt, node);
+      return text !== null ? [text] : [];
+    }
+    var inputs = node.inputs || {};
+    var priority = ['conditioning', 'conditioning_1', 'conditioning_2', 'positive', 'negative', 'conditioning_to'];
+    var found = [];
+    var tried = {};
+    priority.forEach(function (k) {
+      if (isLink(inputs[k])) {
+        tried[k] = true;
+        found = found.concat(resolveConditioning(prompt, inputs[k][0], visited, depth + 1));
+      }
+    });
+    Object.keys(inputs).forEach(function (k) {
+      if (tried[k]) return;
+      if (k === 'clip' || k === 'model' || k === 'latent_image' || k === 'vae') return;
+      if (isLink(inputs[k])) {
+        found = found.concat(resolveConditioning(prompt, inputs[k][0], visited, depth + 1));
+      }
+    });
+    return found;
+  }
+
+  // Trace the model chain backwards from the sampler. Returns loaders in order
+  // from the sampler outward: [{kind:'lora',...}, {kind:'model',...}]
+  function traceModelChain(prompt, samplerNode) {
+    var chain = [];
+    var cur = (samplerNode.inputs || {}).model;
+    var seen = {};
+    while (isLink(cur)) {
+      var id = String(cur[0]);
+      if (seen[id]) break;
+      seen[id] = true;
+      var node = prompt[id];
+      if (!node) break;
+      var ct = node.class_type || '';
+      var ins = node.inputs || {};
+      if (ct.indexOf('LoraLoader') !== -1 || ct.indexOf('LoRALoader') !== -1) {
+        chain.push({ kind: 'lora', name: ins.lora_name || '', strengthModel: typeof ins.strength_model === 'number' ? ins.strength_model : null, strengthClip: typeof ins.strength_clip === 'number' ? ins.strength_clip : null });
+      } else if (ct.indexOf('CheckpointLoader') !== -1) {
+        chain.push({ kind: 'model', name: ins.ckpt_name || '' });
+      } else if (ct.indexOf('UNETLoader') !== -1 || ct.indexOf('DiffusionModelLoader') !== -1) {
+        chain.push({ kind: 'model', name: ins.unet_name || '' });
+      }
+      cur = ins.model;
+    }
+    return chain;
+  }
+
+  function findPrimarySampler(prompt) {
+    var samplers = [];
+    Object.keys(prompt).forEach(function (id) {
+      var n = prompt[id];
+      var ct = n.class_type || '';
+      var ins = n.inputs || {};
+      if (ct.indexOf('Sampler') !== -1 && ('positive' in ins || 'negative' in ins)) {
+        samplers.push({ id: id, node: n });
+      }
+    });
+    if (samplers.length <= 1) return samplers[0] || null;
+    // Prefer the sampler whose output feeds a VAEDecode (the final decode).
+    var decodeSources = {};
+    Object.keys(prompt).forEach(function (id) {
+      var n = prompt[id];
+      if ((n.class_type || '').indexOf('VAEDecode') !== -1) {
+        var s = (n.inputs || {}).samples;
+        if (isLink(s)) decodeSources[String(s[0])] = true;
+      }
+    });
+    for (var i = 0; i < samplers.length; i++) {
+      if (decodeSources[samplers[i].id]) return samplers[i];
+    }
+    return samplers[0];
+  }
+
+  function collectUnconnected(prompt, usedIds) {
+    var referenced = {};
+    Object.keys(prompt).forEach(function (id) {
+      var ins = prompt[id].inputs || {};
+      Object.keys(ins).forEach(function (k) {
+        if (isLink(ins[k])) referenced[String(ins[k][0])] = true;
+      });
+    });
+    var out = [];
+    Object.keys(prompt).forEach(function (id) {
+      if (usedIds[id] || referenced[id]) return;
+      var n = prompt[id];
+      var ct = n.class_type || '';
+      var ins = n.inputs || {};
+      if (ct.indexOf('LoraLoader') !== -1) out.push('LoRA: ' + (ins.lora_name || '') + (typeof ins.strength_model === 'number' ? ' (' + ins.strength_model + ')' : ''));
+      else if (ct.indexOf('UNETLoader') !== -1) out.push('モデル: ' + (ins.unet_name || ''));
+      else if (ct.indexOf('CheckpointLoader') !== -1) out.push('モデル: ' + (ins.ckpt_name || ''));
+    });
+    return out;
+  }
+
+  function parseComfy(texts) {
+    var prompt = null, workflow = null;
+    try { prompt = JSON.parse(protectSeeds(texts.prompt)); } catch (e) { /* ignore */ }
+    if (!prompt) return null;
+    if (texts.workflow) { try { workflow = JSON.parse(texts.workflow); } catch (e) { workflow = null; } }
+    var primary = findPrimarySampler(prompt);
+    var result = {
+      sourceFormat: 'comfy',
+      positive: '', negative: '', positiveAlt: [], negativeAlt: [],
+      seed: null, steps: null, cfg: null, sampler: null, scheduler: null, denoise: null,
+      model: null, loras: [], latentWidth: null, latentHeight: null, isImg2Img: false,
+      unconnected: [], promptJson: texts.prompt, workflowJson: texts.workflow || null,
+      workflowObject: workflow
+    };
+    if (!primary) {
+      // Fallback: gather every CLIPTextEncode (order unknown, flagged by caller via alt)
+      var all = [];
+      Object.keys(prompt).forEach(function (id) {
+        var n = prompt[id];
+        if ((n.class_type || '').indexOf('CLIPTextEncode') !== -1) {
+          var t = resolveTextInput(prompt, n);
+          if (t !== null) all.push(t);
+        }
+      });
+      result.positiveAlt = all;
+      return result;
+    }
+    var ins = primary.node.inputs || {};
+    if (isLink(ins.positive)) {
+      var pos = resolveConditioning(prompt, ins.positive[0]);
+      result.positive = pos[0] || '';
+      result.positiveAlt = pos.slice(1);
+    }
+    if (isLink(ins.negative)) {
+      var neg = resolveConditioning(prompt, ins.negative[0]);
+      result.negative = neg[0] || '';
+      result.negativeAlt = neg.slice(1);
+    }
+    var seedVal = ins.seed !== undefined ? ins.seed : ins.noise_seed;
+    result.seed = (seedVal === undefined || seedVal === null || isLink(seedVal)) ? null : String(seedVal);
+    result.steps = typeof ins.steps === 'number' ? ins.steps : null;
+    result.cfg = typeof ins.cfg === 'number' ? ins.cfg : null;
+    result.sampler = typeof ins.sampler_name === 'string' ? ins.sampler_name : null;
+    result.scheduler = typeof ins.scheduler === 'string' ? ins.scheduler : null;
+    result.denoise = typeof ins.denoise === 'number' ? ins.denoise : null;
+
+    var chain = traceModelChain(prompt, primary.node);
+    chain.forEach(function (entry) {
+      if (entry.kind === 'lora') result.loras.push({ name: entry.name, strengthModel: entry.strengthModel, strengthClip: entry.strengthClip });
+      if (entry.kind === 'model' && result.model === null) result.model = entry.name;
+    });
+
+    if (isLink(ins.latent_image)) {
+      var latNode = prompt[String(ins.latent_image[0])];
+      if (latNode) {
+        var lct = latNode.class_type || '';
+        var lins = latNode.inputs || {};
+        if (typeof lins.width === 'number' && typeof lins.height === 'number') {
+          result.latentWidth = lins.width;
+          result.latentHeight = lins.height;
+        }
+        if (lct.indexOf('VAEEncode') !== -1) result.isImg2Img = true;
+      }
+    }
+
+    var used = {};
+    // Mark the whole chains we actually walked as used: sampler, its conditioning
+    // sources and its model chain are referenced by definition; unconnected means
+    // "not referenced by any other node and not the sampler itself".
+    used[primary.id] = true;
+    result.unconnected = collectUnconnected(prompt, used);
+    return result;
+  }
+
+  function parseA1111(parameters) {
+    var result = { sourceFormat: 'a1111', positive: '', negative: '', params: {}, rawParameters: parameters };
+    var negMarker = '\nNegative prompt: ';
+    var negIdx = parameters.indexOf(negMarker);
+    var head = parameters, negText = '', tail = '';
+    if (negIdx !== -1) {
+      head = parameters.substring(0, negIdx);
+      var rest = parameters.substring(negIdx + negMarker.length);
+      var lastNl = rest.lastIndexOf('\n');
+      if (lastNl !== -1 && rest.substring(lastNl + 1).indexOf('Steps:') !== -1) {
+        negText = rest.substring(0, lastNl);
+        tail = rest.substring(lastNl + 1);
+      } else {
+        negText = rest;
+      }
+    } else {
+      var lastNl2 = parameters.lastIndexOf('\n');
+      if (lastNl2 !== -1 && parameters.substring(lastNl2 + 1).indexOf('Steps:') !== -1) {
+        head = parameters.substring(0, lastNl2);
+        tail = parameters.substring(lastNl2 + 1);
+      }
+    }
+    result.positive = head;
+    result.negative = negText;
+    tail.split(',').forEach(function (part) {
+      var c = part.indexOf(':');
+      if (c !== -1) result.params[part.substring(0, c).trim()] = part.substring(c + 1).trim();
+    });
+    return result;
+  }
+
+  // --- autoTags normalization (plan section 7) ---
+  var QUALITY_TAGS = ['masterpiece', 'best quality', 'amazing quality', 'very aesthetic', 'absurdres', 'high quality', 'low quality', 'worst quality', 'score_7', 'score_8', 'score_9', 'score_6', 'score_5', 'score_4', 'newest', 'safe', 'sensitive', 'questionable', 'explicit'];
+
+  function normalizeAutoTags(positive) {
+    if (!positive) return { tags: [], lorasInPrompt: [] };
+    var tags = [], lorasInPrompt = [], seen = {};
+    positive.split(',').forEach(function (raw) {
+      var t = raw.replace(/\s+/g, ' ').trim().toLowerCase();
+      if (!t) return;
+      var loraMatch = t.match(/<lora:([^:>]+)(?::([\d.]+))?>/);
+      if (loraMatch) {
+        lorasInPrompt.push({ name: loraMatch[1], strength: loraMatch[2] ? parseFloat(loraMatch[2]) : null });
+        return;
+      }
+      // strip emphasis layers: ((x)), (x:1.2), {x}, [x]
+      var prev;
+      do {
+        prev = t;
+        t = t.replace(/^\((.*)\)$/, '$1').replace(/^\{(.*)\}$/, '$1').replace(/^\[(.*)\]$/, '$1');
+      } while (t !== prev);
+      t = t.replace(/:\s*\d+(?:\.\d+)?$/, '').replace(/[(){}[\]]/g, '').trim();
+      if (!t || t === 'break') return;
+      if (!seen[t]) { seen[t] = true; tags.push(t); }
+    });
+    return { tags: tags, lorasInPrompt: lorasInPrompt };
+  }
+
+  global.PWParser = {
+    isPng: isPng,
+    parsePngTexts: parsePngTexts,
+    parseComfy: parseComfy,
+    parseA1111: parseA1111,
+    normalizeAutoTags: normalizeAutoTags,
+    QUALITY_TAGS: QUALITY_TAGS
+  };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+/* Prompt Warehouse app: IndexedDB storage, sequential import queue,
+   search / tag filters, detail drawer, lightweight JSON export-import. */
+(function () {
+  'use strict';
+  var PW = window.PWParser;
+  var STAR_ON = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 2.5l2.95 6.35 6.95.82-5.13 4.73 1.38 6.85L12 17.77l-6.15 3.48 1.38-6.85L2.1 9.67l6.95-.82z" fill="currentColor"/></svg>';
+  var STAR_OFF = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 2.5l2.95 6.35 6.95.82-5.13 4.73 1.38 6.85L12 17.77l-6.15 3.48 1.38-6.85L2.1 9.67l6.95-.82z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>';
+
+  // ---------- storage (IndexedDB, with in-memory fallback) ----------
+  // Some embedding contexts (sandboxed preview iframes etc.) deny the
+  // IndexedDB API outright: indexedDB.open() throws synchronously there.
+  // Probe once at startup; when IDB is unusable, fall back to an in-memory
+  // store so registration still works for the session, and tell the user
+  // that nothing persists in this context.
+  var DB_NAME = 'prompt-warehouse';
+  var dbPromise = null;
+  var storageMode = 'idb';
+  function openDb() {
+    if (dbPromise) return dbPromise;
+    dbPromise = new Promise(function (resolve, reject) {
+      var req;
+      try { req = indexedDB.open(DB_NAME, 1); } catch (e) { reject(e); return; }
+      req.onupgradeneeded = function () {
+        var db = req.result;
+        if (!db.objectStoreNames.contains('items')) {
+          var store = db.createObjectStore('items', { keyPath: 'id' });
+          store.createIndex('createdAt', 'createdAt');
+          store.createIndex('favorite', 'favorite');
+          store.createIndex('fileHash', 'fileHash', { unique: false });
+        }
+        if (!db.objectStoreNames.contains('categories')) {
+          db.createObjectStore('categories', { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains('meta')) {
+          db.createObjectStore('meta', { keyPath: 'key' });
+        }
+      };
+      req.onsuccess = function () { resolve(req.result); };
+      req.onerror = function () { reject(req.error); };
+    });
+    try {
+      if (navigator.storage && navigator.storage.persist) {
+        var pr = navigator.storage.persist();
+        if (pr && pr.catch) pr.catch(function () {});
+      }
+    } catch (e) { /* persistence is best-effort */ }
+    return dbPromise;
+  }
+  function tx(mode, fn) {
+    return openDb().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var t = db.transaction('items', mode);
+        var store = t.objectStore('items');
+        var out;
+        t.oncomplete = function () { resolve(out); };
+        t.onerror = function () { reject(t.error); };
+        out = fn(store);
+        if (out && typeof out === 'object' && 'onsuccess' in out) {
+          var req = out;
+          out = undefined;
+          req.onsuccess = function () { out = req.result; };
+        }
+      });
+    });
+  }
+  function idbAll() { return tx('readonly', function (s) { return s.getAll(); }); }
+  function idbPut(item) { return tx('readwrite', function (s) { s.put(item); }); }
+  function idbDelete(id) { return tx('readwrite', function (s) { s.delete(id); }); }
+  function idbFindByHash(hash) {
+    return openDb().then(function (db) {
+      return new Promise(function (resolve) {
+        var t = db.transaction('items', 'readonly');
+        var idx = t.objectStore('items').index('fileHash');
+        var req = idx.get(hash);
+        req.onsuccess = function () { resolve(req.result || null); };
+        req.onerror = function () { resolve(null); };
+      });
+    });
+  }
+  var memItems = new Map();
+  function memAll() { return Promise.resolve(Array.from(memItems.values())); }
+  function memPut(item) { memItems.set(item.id, item); return Promise.resolve(); }
+  function memDelete(id) { memItems.delete(id); return Promise.resolve(); }
+  function memFindByHash(hash) {
+    var found = null;
+    memItems.forEach(function (item) { if (item.fileHash && item.fileHash === hash) found = item; });
+    return Promise.resolve(found);
+  }
+  function probeStorage() {
+    // Open plus a write/delete round-trip in the meta store: some contexts
+    // accept open() but deny writes.
+    return openDb().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        try {
+          var t = db.transaction('meta', 'readwrite');
+          var store = t.objectStore('meta');
+          store.put({ key: '__probe__', value: 1 });
+          store.delete('__probe__');
+          t.oncomplete = function () { resolve(true); };
+          t.onerror = function () { reject(t.error); };
+          t.onabort = function () { reject(t.error || new Error('probe aborted')); };
+        } catch (e) { reject(e); }
+      });
+    }).then(function () { storageMode = 'idb'; return 'idb'; }, function () {
+      storageMode = 'memory';
+      dbPromise = null;
+      var notice = document.getElementById('storageNotice');
+      if (notice) notice.hidden = false;
+      return 'memory';
+    });
+  }
+  function dbAll() {
+    if (appMode === 'drive') return drive.ready ? Promise.resolve(driveItemsCache) : Promise.resolve([]);
+    return storageMode === 'idb' ? idbAll() : memAll();
+  }
+  function dbPut(item) {
+    if (appMode === 'drive') return drivePutItem(item);
+    return storageMode === 'idb' ? idbPut(item) : memPut(item);
+  }
+  function dbDelete(id) {
+    if (appMode === 'drive') return driveDeleteItem(id);
+    return storageMode === 'idb' ? idbDelete(id) : memDelete(id);
+  }
+  function dbFindByHash(hash) {
+    if (appMode === 'drive') {
+      var found = driveItemsCache.find(function (i) { return i.fileHash && i.fileHash === hash; }) || null;
+      return Promise.resolve(found);
+    }
+    return storageMode === 'idb' ? idbFindByHash(hash) : memFindByHash(hash);
+  }
+
+  // ---------- Google Drive backend ----------
+  // Data lives in an app-only folder on the user's Drive (drive.file scope):
+  // one index JSON (all metadata) + one file per image / thumbnail, named by
+  // content hash. The PC registers; other devices sign in and read the same
+  // index, so registration propagates without any server of our own.
+  var DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+  var INDEX_NAME = 'prompt-warehouse-index.json';
+  var FOLDER_NAME = 'prompt-warehouse';
+  var appMode = 'local'; // 'local' | 'drive'
+  var driveItemsCache = [];
+  var drive = { token: null, tokenExp: 0, folderId: null, indexId: null, fileIds: {}, ready: false, client: null, batchDepth: 0, lastIndexJson: '' };
+  function driveClientId() { try { return localStorage.getItem('pw-drive-client-id') || ''; } catch (e) { return ''; } }
+  function driveSetStatus(text) { var el = document.getElementById('driveStatus'); if (el) el.textContent = text; }
+  function updateDriveUi() {
+    var local = document.getElementById('modeLocalBtn'), drv = document.getElementById('modeDriveBtn'), panel = document.getElementById('drivePanel');
+    if (!local || !drv || !panel) return;
+    local.classList.toggle('is-active', appMode === 'local');
+    drv.classList.toggle('is-active', appMode === 'drive');
+    panel.hidden = appMode !== 'drive';
+    if (appMode === 'drive') {
+      if (!driveClientId()) driveSetStatus('まずクライアントIDを設定してください');
+      else if (drive.ready) driveSetStatus('ドライブ接続中（フォルダ: ' + FOLDER_NAME + '）');
+      else if (drive.token) driveSetStatus('ドライブを読み込み中...');
+      else driveSetStatus('ドライブ未接続。サインインしてください');
+    }
+  }
+  var gisPromise = null;
+  function ensureGisLoaded() {
+    // Loaded lazily so local (offline) mode never touches the network.
+    if (window.google && google.accounts && google.accounts.oauth2) return Promise.resolve();
+    if (gisPromise) return gisPromise;
+    gisPromise = new Promise(function (resolve, reject) {
+      var sc = document.createElement('script');
+      sc.src = 'https://accounts.google.com/gsi/client';
+      sc.async = true;
+      sc.onload = function () {
+        if (window.google && google.accounts && google.accounts.oauth2) resolve();
+        else reject(new Error('Google のサインイン部品を読み込めませんでした'));
+      };
+      sc.onerror = function () { gisPromise = null; reject(new Error('Google のサインイン部品を読み込めませんでした。通信環境を確認してください')); };
+      document.head.appendChild(sc);
+    });
+    return gisPromise;
+  }
+  function driveEnsureToken(interactive) {
+    if (drive.token && Date.now() < drive.tokenExp - 30000) return Promise.resolve(drive.token);
+    if (!driveClientId()) return Promise.reject(new Error('クライアントIDが未設定です'));
+    return ensureGisLoaded().then(function () { return driveRequestToken(interactive); });
+  }
+  function driveRequestToken(interactive) {
+    return new Promise(function (resolve, reject) {
+      if (!drive.client) {
+        drive.client = google.accounts.oauth2.initTokenClient({
+          client_id: driveClientId(), scope: DRIVE_SCOPE,
+          callback: function (resp) {
+            if (resp && resp.access_token) {
+              drive.token = resp.access_token;
+              drive.tokenExp = Date.now() + ((resp.expires_in || 3600) * 1000);
+              updateDriveUi();
+              resolve(drive.token);
+            } else reject(new Error('サインインが完了しませんでした'));
+          },
+          error_callback: function () { reject(new Error('サインインできませんでした')); }
+        });
+      }
+      try { drive.client.requestAccessToken({ prompt: interactive ? 'consent' : '' }); }
+      catch (e) { reject(e); }
+    });
+  }
+  function driveApi(path, opts) {
+    opts = opts || {};
+    var headers = Object.assign({}, opts.headers || {});
+    headers['Authorization'] = 'Bearer ' + drive.token;
+    opts.headers = headers;
+    return fetch('https://www.googleapis.com/drive/v3/' + path, opts).then(function (res) {
+      if (res.status === 401) { drive.token = null; updateDriveUi(); throw new Error('ドライブの認証が切れました'); }
+      if (!res.ok) throw new Error('Drive API error ' + res.status);
+      return res;
+    });
+  }
+  function driveUpload(name, blob, existingId) {
+    var meta = { name: name };
+    if (!existingId && drive.folderId) meta.parents = [drive.folderId];
+    var form = new FormData();
+    form.append('metadata', new Blob([JSON.stringify(meta)], { type: 'application/json' }));
+    form.append('file', blob);
+    var base = 'https://www.googleapis.com/upload/drive/v3/files';
+    var url = existingId ? base + '/' + existingId + '?uploadType=multipart&fields=id' : base + '?uploadType=multipart&fields=id';
+    return fetch(url, { method: existingId ? 'PATCH' : 'POST', headers: { 'Authorization': 'Bearer ' + drive.token }, body: form }).then(function (res) {
+      if (!res.ok) throw new Error('Drive upload error ' + res.status);
+      return res.json();
+    }).then(function (f) { drive.fileIds[name] = f.id; return f.id; });
+  }
+  function driveListAppFiles() {
+    var ids = {};
+    var pageToken = null;
+    function next() {
+      var url = 'files?fields=nextPageToken,files(id,name)&pageSize=1000&q=' + encodeURIComponent('trashed=false') + (pageToken ? '&pageToken=' + encodeURIComponent(pageToken) : '');
+      return driveApi(url).then(function (r) { return r.json(); }).then(function (data) {
+        (data.files || []).forEach(function (f) { ids[f.name] = f.id; });
+        if (data.nextPageToken) { pageToken = data.nextPageToken; return next(); }
+        drive.fileIds = ids;
+        return ids;
+      });
+    }
+    return next();
+  }
+  function driveSetup() {
+    return driveListAppFiles().then(function (ids) {
+      if (ids[FOLDER_NAME]) { drive.folderId = ids[FOLDER_NAME]; return null; }
+      return driveApi('files', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' }) })
+        .then(function (r) { return r.json(); }).then(function (f) { drive.folderId = f.id; drive.fileIds[FOLDER_NAME] = f.id; });
+    }).then(function () {
+      drive.indexId = drive.fileIds[INDEX_NAME] || null;
+      if (!drive.indexId) { driveItemsCache = []; drive.ready = true; drive.lastIndexJson = ''; updateDriveUi(); return []; }
+      return driveApi('files/' + drive.indexId + '?alt=media').then(function (r) { return r.text(); }).then(function (text) {
+        drive.lastIndexJson = text;
+        var data = null;
+        try { data = JSON.parse(text); } catch (e) { /* treat as empty */ }
+        driveItemsCache = (data && data.items) || [];
+        drive.ready = true;
+        updateDriveUi();
+        return driveItemsCache;
+      });
+    });
+  }
+  function driveConnect(interactive) {
+    return driveEnsureToken(interactive).then(function () { return driveSetup(); });
+  }
+  function driveLightweightItems() {
+    return driveItemsCache.map(function (item) {
+      var copy = Object.assign({}, item);
+      delete copy.imageBlob; delete copy.thumbBlob;
+      return copy;
+    });
+  }
+  function driveFlushIndex() {
+    if (!drive.ready) return Promise.resolve();
+    var payload = JSON.stringify({ app: 'prompt-warehouse', version: 2, updatedAt: new Date().toISOString(), items: driveLightweightItems() });
+    drive.lastIndexJson = payload;
+    return driveUpload(INDEX_NAME, new Blob([payload], { type: 'application/json' }), drive.indexId).then(function (id) { drive.indexId = id; });
+  }
+  function drivePutItem(item) {
+    var existing = driveItemsCache.findIndex(function (i) { return i.id === item.id; });
+    if (existing === -1) driveItemsCache.unshift(item); else driveItemsCache[existing] = item;
+    var steps = Promise.resolve();
+    if (item.imageBlob && item.fileHash) {
+      var imgName = item.fileHash + '.' + extForType(item.imageBlob.type);
+      steps = steps.then(function () { return driveUpload(imgName, item.imageBlob, drive.fileIds[imgName] || null); });
+    }
+    if (item.thumbBlob && item.fileHash) {
+      var thName = item.fileHash + '.thumb.webp';
+      steps = steps.then(function () { return driveUpload(thName, item.thumbBlob, drive.fileIds[thName] || null); });
+    }
+    return steps.then(function () {
+      if (drive.batchDepth === 0) return driveFlushIndex();
+    });
+  }
+  function driveDeleteItem(id) {
+    var item = driveItemsCache.find(function (i) { return i.id === id; });
+    driveItemsCache = driveItemsCache.filter(function (i) { return i.id !== id; });
+    var steps = Promise.resolve();
+    if (item && item.fileHash) {
+      [item.fileHash, item.fileHash + '.thumb.webp'].forEach(function (prefix) {
+        Object.keys(drive.fileIds).forEach(function (name) {
+          if (name === prefix || name.indexOf(prefix + '.') === 0) {
+            var fid = drive.fileIds[name];
+            steps = steps.then(function () { return driveApi('files/' + fid, { method: 'DELETE' }).catch(function () {}); });
+          }
+        });
+      });
+    }
+    return steps.then(function () { return driveFlushIndex(); });
+  }
+  function driveRemoteFileId(item, kind) {
+    if (!item.fileHash) return null;
+    if (kind === 'thumb') return drive.fileIds[item.fileHash + '.thumb.webp'] || null;
+    var hit = null;
+    Object.keys(drive.fileIds).forEach(function (name) {
+      if (name.indexOf(item.fileHash + '.') === 0 && name.indexOf('.thumb.') === -1) hit = drive.fileIds[name];
+    });
+    return hit;
+  }
+  function ensureRemoteUrl(item, kind) {
+    var cacheKey = item.id + ':' + kind;
+    if (urlCache[cacheKey]) return Promise.resolve(urlCache[cacheKey]);
+    var fid = driveRemoteFileId(item, kind);
+    if (!fid) return Promise.resolve(null);
+    return driveEnsureToken(false).then(function () {
+      return driveApi('files/' + fid + '?alt=media');
+    }).then(function (r) { return r.blob(); }).then(function (blob) {
+      var url = URL.createObjectURL(blob);
+      urlCache[cacheKey] = url;
+      return url;
+    }).catch(function () { return null; });
+  }
+  function hydrateRemoteImages(root) {
+    if (appMode !== 'drive') return;
+    (root || document).querySelectorAll('img[data-remote]').forEach(function (img) {
+      var parts = img.getAttribute('data-remote').split('|');
+      var item = state.items.find(function (i) { return i.id === parts[0]; });
+      if (!item) return;
+      ensureRemoteUrl(item, parts[1]).then(function (url) { if (url && img.isConnected) img.src = url; });
+    });
+  }
+  function driveRefresh() {
+    if (appMode !== 'drive' || !drive.ready || !drive.indexId || state.selectedId) return;
+    driveEnsureToken(false).then(function () {
+      return driveApi('files/' + drive.indexId + '?alt=media');
+    }).then(function (r) { return r.text(); }).then(function (text) {
+      if (text && text !== drive.lastIndexJson) {
+        var data = null;
+        try { data = JSON.parse(text); } catch (e) { return; }
+        if (data && Array.isArray(data.items)) {
+          drive.lastIndexJson = text;
+          driveItemsCache = data.items;
+          state.items = data.items.slice();
+          render();
+          driveListAppFiles().catch(function () {});
+        }
+      }
+    }).catch(function () { /* stay quiet on background refresh */ });
+  }
+  setInterval(function () { if (document.visibilityState === 'visible') driveRefresh(); }, 60000);
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') driveRefresh(); });
+
+  try { if (localStorage.getItem('pw-storage-mode') === 'drive') appMode = 'drive'; } catch (e) {}
+
+  // ---------- helpers ----------
+  function $(id) { return document.getElementById(id); }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function toast(msg) {
+    var el = $('toast');
+    el.textContent = msg;
+    el.hidden = false;
+    clearTimeout(toast._t);
+    toast._t = setTimeout(function () { el.hidden = true; }, 2200);
+  }
+  var urlCache = {};
+  function getImageUrl(item, kind) {
+    // Abstraction point for a future folder-reference mode (plan section 5):
+    // swap the inside of this function to FileSystemFileHandle.getFile()
+    // without touching card/detail code.
+    // URLs are cached per item: revoking on every render would cancel
+    // in-flight image loads and log failed-resource errors.
+    var cacheKey = item.id + ':' + kind;
+    if (urlCache[cacheKey]) return urlCache[cacheKey];
+    var blob = kind === 'thumb' ? (item.thumbBlob || item.imageBlob) : item.imageBlob;
+    if (!blob) return null;
+    var url = URL.createObjectURL(blob);
+    urlCache[cacheKey] = url;
+    return url;
+  }
+  function releaseItemUrls(itemId) {
+    Object.keys(urlCache).forEach(function (k) {
+      if (k.indexOf(itemId + ':') === 0) { URL.revokeObjectURL(urlCache[k]); delete urlCache[k]; }
+    });
+  }
+  function hashFile(buffer) {
+    if (window.crypto && crypto.subtle && crypto.subtle.digest) {
+      return crypto.subtle.digest('SHA-256', buffer).then(function (digest) {
+        return Array.prototype.map.call(new Uint8Array(digest), function (b) {
+          return ('0' + b.toString(16)).slice(-2);
+        }).join('');
+      }).catch(function () { return fnvHash(buffer); });
+    }
+    return Promise.resolve(fnvHash(buffer));
+  }
+  function fnvHash(buffer) {
+    var b = new Uint8Array(buffer), h = 0x811c9dc5;
+    for (var i = 0; i < b.length; i += 97) { h ^= b[i]; h = (h * 0x01000193) >>> 0; }
+    return 'fnv-' + h.toString(16) + '-' + buffer.byteLength;
+  }
+  function makeThumbnail(blob) {
+    return createImageBitmap(blob).then(function (bmp) {
+      var scale = Math.min(1, 480 / Math.max(bmp.width, bmp.height));
+      var w = Math.max(1, Math.round(bmp.width * scale));
+      var h = Math.max(1, Math.round(bmp.height * scale));
+      var canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(bmp, 0, 0, w, h);
+      bmp.close();
+      return new Promise(function (resolve) {
+        canvas.toBlob(function (b) { resolve(b || blob); }, 'image/webp', 0.8);
+      });
+    }).catch(function () { return null; });
+  }
+  function imageSize(blob) {
+    return createImageBitmap(blob).then(function (bmp) {
+      var s = { width: bmp.width, height: bmp.height };
+      bmp.close();
+      return s;
+    }).catch(function () { return { width: null, height: null }; });
+  }
+  function download(name, blob) {
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+  function copyText(text, label) {
+    var done = function () { toast(label + 'をコピーしました'); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () { fallbackCopy(text); done(); });
+    } else { fallbackCopy(text); done(); }
+  }
+  function fallbackCopy(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch (e) { /* ignore */ }
+    ta.remove();
+  }
+  function fmtDate(ts) {
+    var d = new Date(ts);
+    return d.getFullYear() + '/' + (d.getMonth() + 1) + '/' + d.getDate();
+  }
+
+  // ---------- state ----------
+  var state = {
+    items: [],
+    filter: 'all',
+    query: '',
+    activeTags: [],
+    sort: 'new',
+    shown: 100,
+    selectedId: null,
+    excludeQuality: false
+  };
+  var PAGE = 100;
+
+  // ---------- import ----------
+  function buildItemFromParsed(parsed, base) {
+    var auto = PW.normalizeAutoTags(parsed.positive || '');
+    var item = Object.assign(base, {
+      sourceFormat: parsed.sourceFormat,
+      positive: parsed.positive || '',
+      negative: parsed.negative || '',
+      positiveAlt: parsed.positiveAlt || [],
+      seed: parsed.seed != null ? parsed.seed : null,
+      steps: parsed.steps != null ? parsed.steps : null,
+      cfg: parsed.cfg != null ? parsed.cfg : null,
+      sampler: parsed.sampler || null,
+      scheduler: parsed.scheduler || null,
+      denoise: parsed.denoise != null ? parsed.denoise : null,
+      model: parsed.model || null,
+      loras: parsed.loras || [],
+      unconnected: parsed.unconnected || [],
+      isImg2Img: !!parsed.isImg2Img,
+      workflowJson: parsed.workflowJson || null,
+      promptJson: parsed.promptJson || null,
+      rawParameters: parsed.rawParameters || null,
+      a1111Params: parsed.params || null,
+      autoTags: auto.tags,
+      lorasInPrompt: auto.lorasInPrompt
+    });
+    if (parsed.params) {
+      var p = parsed.params;
+      item.model = p['Model'] || item.model;
+      item.seed = p['Seed'] || item.seed;
+      item.steps = p['Steps'] ? parseInt(p['Steps'], 10) : item.steps;
+      item.cfg = p['CFG scale'] ? parseFloat(p['CFG scale']) : item.cfg;
+      item.sampler = p['Sampler'] || item.sampler;
+      if (p['Size'] && /^\d+x\d+$/.test(p['Size'])) {
+        var wh = p['Size'].split('x');
+        item.latentWidth = parseInt(wh[0], 10);
+        item.latentHeight = parseInt(wh[1], 10);
+      }
+    }
+    if (parsed.latentWidth) { item.latentWidth = parsed.latentWidth; item.latentHeight = parsed.latentHeight; }
+    return item;
+  }
+
+  function processFile(file) {
+    return file.arrayBuffer().then(function (buffer) {
+      return hashFile(buffer).then(function (hash) {
+        return dbFindByHash(hash).then(function (existing) {
+          if (existing) return { status: 'duplicate', name: file.name };
+          var base = {
+            id: (crypto.randomUUID ? crypto.randomUUID() : 'id-' + Date.now() + '-' + Math.random().toString(16).slice(2)),
+            title: '', fileName: file.name, fileHash: hash,
+            tags: [], memo: '', favorite: false,
+            imageBlob: file, thumbBlob: null,
+            width: null, height: null, latentWidth: null, latentHeight: null,
+            createdAt: Date.now(), updatedAt: Date.now()
+          };
+          var parsePromise;
+          if (PW.isPng(buffer)) {
+            parsePromise = PW.parsePngTexts(buffer).then(function (texts) {
+              if (texts.prompt) {
+                var comfy = PW.parseComfy(texts);
+                if (comfy) return buildItemFromParsed(comfy, base);
+              }
+              if (texts.parameters) return buildItemFromParsed(PW.parseA1111(texts.parameters), base);
+              return buildItemFromParsed({ sourceFormat: 'none' }, base);
+            });
+          } else {
+            parsePromise = Promise.resolve(buildItemFromParsed({ sourceFormat: 'none' }, base));
+          }
+          return parsePromise.then(function (item) {
+            return imageSize(file).then(function (size) {
+              item.width = size.width; item.height = size.height;
+              return makeThumbnail(file).then(function (thumb) {
+                item.thumbBlob = thumb;
+                return dbPut(item).then(function () { return { status: 'added', name: file.name, item: item }; });
+              });
+            });
+          });
+        });
+      });
+    }).catch(function (err) {
+      return { status: 'error', name: file.name, error: String(err && err.message || err) };
+    });
+  }
+
+  function importFiles(fileList) {
+    var files = Array.prototype.filter.call(fileList, function (f) {
+      return /^image\/(png|jpeg|webp)$/.test(f.type) || /\.(png|jpe?g|webp)$/i.test(f.name);
+    });
+    if (!files.length) { toast('対応する画像ファイルがありませんでした'); return; }
+    var progress = $('importProgress'), fill = $('importProgressFill'), text = $('importProgressText');
+    progress.hidden = false;
+    drive.batchDepth++;
+    var done = 0, added = 0, dup = 0, failed = 0;
+    // Sequential queue: at most 1 file at a time (plan section 7).
+    var chain = Promise.resolve();
+    files.forEach(function (file) {
+      chain = chain.then(function () {
+        text.textContent = '取り込み中 ' + (done + 1) + ' / ' + files.length + ' 件: ' + file.name;
+        return processFile(file).then(function (res) {
+          done++;
+          if (res.status === 'added') { added++; if (res.item) state.items.unshift(res.item); }
+          else if (res.status === 'duplicate') dup++;
+          else failed++;
+          fill.style.width = Math.round(done / files.length * 100) + '%';
+        });
+      });
+    });
+    chain.then(function () {
+      drive.batchDepth--;
+      if (appMode === 'drive' && drive.batchDepth === 0) return driveFlushIndex().catch(function () {});
+    }).then(function () {
+      progress.hidden = true;
+      fill.style.width = '0';
+      var msg = added + ' 件を登録しました';
+      if (dup) msg += '（重複 ' + dup + ' 件をスキップ）';
+      if (failed) msg += '（失敗 ' + failed + ' 件）';
+      toast(msg);
+      render();
+    });
+  }
+
+  // ---------- filtering / rendering ----------
+  function filteredItems() {
+    var q = state.query.trim().toLowerCase();
+    var words = q ? q.split(/\s+/) : [];
+    var list = state.items.filter(function (item) {
+      if (state.filter === 'favorite' && !item.favorite) return false;
+      if (state.filter === 'imageonly' && item.sourceFormat !== 'none') return false;
+      if (state.filter === 'comfy' && item.sourceFormat !== 'comfy') return false;
+      if (state.filter === 'a1111' && item.sourceFormat !== 'a1111') return false;
+      for (var i = 0; i < state.activeTags.length; i++) {
+        var t = state.activeTags[i];
+        if ((item.autoTags || []).indexOf(t) === -1 && (item.tags || []).indexOf(t) === -1) return false;
+      }
+      if (words.length) {
+        var hay = [item.positive, item.negative, item.title, item.memo, item.model, item.fileName,
+          (item.tags || []).join(' '), (item.autoTags || []).join(' ')].join('\n').toLowerCase();
+        for (var j = 0; j < words.length; j++) if (hay.indexOf(words[j]) === -1) return false;
+      }
+      return true;
+    });
+    list.sort(function (a, b) {
+      if (state.sort === 'old') return a.createdAt - b.createdAt;
+      if (state.sort === 'title') return String(a.title || a.fileName).localeCompare(String(b.title || b.fileName), 'ja');
+      return b.createdAt - a.createdAt;
+    });
+    return list;
+  }
+
+  function popularTags() {
+    var counts = {};
+    state.items.forEach(function (item) {
+      (item.autoTags || []).forEach(function (t) { counts[t] = (counts[t] || 0) + 1; });
+    });
+    var entries = Object.keys(counts).map(function (t) { return { tag: t, count: counts[t] }; });
+    if (state.excludeQuality) {
+      entries = entries.filter(function (e) { return PW.QUALITY_TAGS.indexOf(e.tag) === -1; });
+    }
+    entries.sort(function (a, b) { return b.count - a.count || a.tag.localeCompare(b.tag); });
+    return entries.slice(0, 30);
+  }
+
+  function render() {
+    $('totalCount').textContent = state.items.length;
+    $('countAll').textContent = state.items.length;
+    $('countFav').textContent = state.items.filter(function (i) { return i.favorite; }).length;
+    $('countImageOnly').textContent = state.items.filter(function (i) { return i.sourceFormat === 'none'; }).length;
+    $('countComfy').textContent = state.items.filter(function (i) { return i.sourceFormat === 'comfy'; }).length;
+    $('countA1111').textContent = state.items.filter(function (i) { return i.sourceFormat === 'a1111'; }).length;
+
+    var tagUl = $('popularTags');
+    tagUl.innerHTML = popularTags().map(function (e) {
+      var active = state.activeTags.indexOf(e.tag) !== -1 ? ' class="is-active"' : '';
+      return '<li><button type="button" data-tag="' + esc(e.tag) + '"' + active + '><span class="tag-name">' + esc(e.tag) + '</span><span class="tag-count">' + e.count + '</span></button></li>';
+    }).join('');
+
+    var chips = $('activeTags');
+    if (state.activeTags.length) {
+      chips.hidden = false;
+      chips.innerHTML = state.activeTags.map(function (t) {
+        return '<button type="button" class="chip" data-untag="' + esc(t) + '">' + esc(t) + ' ×</button>';
+      }).join('');
+    } else chips.hidden = true;
+
+    var list = filteredItems();
+    $('findingLine').textContent = state.items.length === 0
+      ? '画像を放り込むと、メタ情報からプロンプトが自動で登録されます。'
+      : list.length + ' 件を表示中（全 ' + state.items.length + ' 件）';
+    $('emptyState').hidden = state.items.length !== 0;
+    $('noResultState').hidden = !(state.items.length !== 0 && list.length === 0);
+
+    var grid = $('grid');
+    grid.innerHTML = '';
+    list.slice(0, state.shown).forEach(function (item) {
+      var card = document.createElement('article');
+      card.className = 'card' + (item.id === state.selectedId ? ' is-selected' : '');
+      var thumbUrl = getImageUrl(item, 'thumb');
+      var remoteThumb = (!thumbUrl && appMode === 'drive' && item.fileHash) ? item.id + '|thumb' : null;
+      var title = item.title || item.fileName || '（タイトルなし）';
+      var pills = '';
+      (item.tags || []).slice(0, 4).forEach(function (t) { pills += '<span class="pill">' + esc(t) + '</span>'; });
+      if (!(item.tags || []).length) (item.autoTags || []).slice(0, 4).forEach(function (t) { pills += '<span class="pill pill-auto">' + esc(t) + '</span>'; });
+      (item.loras || []).forEach(function (l) { pills += '<span class="pill pill-lora">' + esc(l.name.replace(/\.safetensors$/, '')) + (l.strengthModel != null ? ' ' + l.strengthModel : '') + '</span>'; });
+      if (item.sourceFormat === 'comfy') pills += '<span class="pill pill-auto">comfyUI</span>';
+      if (item.sourceFormat === 'a1111') pills += '<span class="pill pill-auto">A1111</span>';
+      card.innerHTML =
+        '<div class="card-thumb">' + (thumbUrl ? '<img alt="" src="' + thumbUrl + '">' : remoteThumb ? '<img alt="" data-remote="' + remoteThumb + '">' : '<span class="no-image">画像なし</span>') + '</div>' +
+        '<div class="card-body">' +
+          '<div class="card-title-row"><button type="button" class="card-star' + (item.favorite ? ' is-on' : '') + '" data-fav="' + item.id + '" aria-label="お気に入り切替">' + (item.favorite ? STAR_ON : STAR_OFF) + '</button><span class="card-title">' + esc(title) + '</span></div>' +
+          (pills ? '<div class="card-tags">' + pills + '</div>' : '') +
+          (item.positive ? '<p class="card-prompt">' + esc(item.positive) + '</p>' : '<p class="card-prompt">（プロンプトなし）</p>') +
+          '<div class="card-meta"><span>' + fmtDate(item.createdAt) + '</span><span>' + (item.width ? item.width + '×' + item.height : '') + '</span></div>' +
+        '</div>';
+      card.addEventListener('click', function (ev) {
+        if (ev.target.closest('[data-fav]')) return;
+        openDetail(item.id);
+      });
+      grid.appendChild(card);
+    });
+    $('moreBtn').hidden = list.length <= state.shown;
+    hydrateRemoteImages(grid);
+
+    grid.querySelectorAll('[data-fav]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var item = state.items.find(function (i) { return i.id === btn.getAttribute('data-fav'); });
+        if (!item) return;
+        item.favorite = !item.favorite;
+        item.updatedAt = Date.now();
+        dbPut(item).then(render);
+        if (state.selectedId === item.id) syncDetailFav(item);
+      });
+    });
+    tagUl.querySelectorAll('[data-tag]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var t = btn.getAttribute('data-tag');
+        var i = state.activeTags.indexOf(t);
+        if (i === -1) state.activeTags.push(t); else state.activeTags.splice(i, 1);
+        state.shown = PAGE;
+        render();
+      });
+    });
+    chips.querySelectorAll('[data-untag]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var t = btn.getAttribute('data-untag');
+        state.activeTags = state.activeTags.filter(function (x) { return x !== t; });
+        render();
+      });
+    });
+  }
+
+  // ---------- detail ----------
+  function currentItem() {
+    return state.items.find(function (i) { return i.id === state.selectedId; }) || null;
+  }
+  function genInfoRows(item) {
+    var rows = [];
+    function add(k, v) { if (v !== null && v !== undefined && v !== '') rows.push([k, v]); }
+    add('ファイル名', item.fileName);
+    add('形式', item.sourceFormat === 'comfy' ? 'ComfyUI' : item.sourceFormat === 'a1111' ? 'A1111' : item.sourceFormat === 'template' ? 'テンプレート' : 'メタ情報なし');
+    add('モデル', item.model);
+    (item.loras || []).forEach(function (l, i) {
+      add('LoRA' + (item.loras.length > 1 ? ' ' + (i + 1) : ''), l.name + (l.strengthModel != null ? '（強度 ' + l.strengthModel + (l.strengthClip != null ? ' / clip ' + l.strengthClip : '') + '）' : ''));
+    });
+    add('seed', item.seed);
+    add('steps', item.steps);
+    add('cfg', item.cfg);
+    add('sampler', item.sampler);
+    add('scheduler', item.scheduler);
+    add('denoise', item.denoise);
+    if (item.latentWidth) add('生成サイズ', item.latentWidth + '×' + item.latentHeight);
+    if (item.width) add('画像サイズ', item.width + '×' + item.height);
+    if (item.isImg2Img) add('方式', 'img2img');
+    add('登録日', fmtDate(item.createdAt));
+    return rows;
+  }
+  function fullText(item) {
+    var lines = [];
+    if (item.positive) lines.push('Positive: ' + item.positive);
+    if (item.negative) lines.push('Negative: ' + item.negative);
+    var info = genInfoRows(item).filter(function (r) { return ['モデル', 'seed', 'steps', 'cfg', 'sampler', 'scheduler', '生成サイズ'].indexOf(r[0]) !== -1 || r[0].indexOf('LoRA') === 0; });
+    if (info.length) lines.push(info.map(function (r) { return r[0] + ': ' + r[1]; }).join(', '));
+    return lines.join('\n');
+  }
+  function syncDetailFav(item) {
+    $('favBtn').innerHTML = (item.favorite ? STAR_ON : STAR_OFF) + (item.favorite ? ' お気に入り済み' : ' お気に入り');
+  }
+  function openDetail(id) {
+    state.selectedId = id;
+    var item = currentItem();
+    if (!item) return;
+    $('detail').hidden = false;
+    var wrap = $('detailImageWrap');
+    var url = getImageUrl(item, 'full');
+    if (url) { wrap.innerHTML = '<img alt="" src="' + url + '">'; }
+    else if (appMode === 'drive' && item.fileHash) { wrap.innerHTML = '<img alt="" data-remote="' + item.id + '|full">'; hydrateRemoteImages(wrap); }
+    else wrap.innerHTML = '<div class="no-image">画像なし（プロンプトのみの登録）</div>';
+    $('editTitle').value = item.title || '';
+    $('editTags').value = (item.tags || []).join(', ');
+    $('editMemo').value = item.memo || '';
+    $('editPositive').value = item.positive || '';
+    $('editNegative').value = item.negative || '';
+    syncDetailFav(item);
+    $('genInfo').innerHTML = genInfoRows(item).map(function (r) {
+      return '<dt>' + esc(r[0]) + '</dt><dd>' + esc(r[1]) + '</dd>';
+    }).join('');
+    var unc = item.unconnected || [];
+    $('unconnectedWrap').hidden = unc.length === 0;
+    $('unconnectedList').innerHTML = unc.map(function (u) { return '<li>' + esc(u) + '</li>'; }).join('');
+    $('downloadWorkflowBtn').disabled = !item.workflowJson;
+    render();
+  }
+  function closeDetail() {
+    state.selectedId = null;
+    $('detail').hidden = true;
+    render();
+  }
+
+  // ---------- ZIP (stored entries only for writing; reading also handles deflate) ----------
+  var CRC_TABLE = null;
+  function crc32(bytes) {
+    if (!CRC_TABLE) {
+      CRC_TABLE = [];
+      for (var n = 0; n < 256; n++) {
+        var c = n;
+        for (var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+        CRC_TABLE[n] = c >>> 0;
+      }
+    }
+    var crc = 0xFFFFFFFF;
+    for (var i = 0; i < bytes.length; i++) crc = CRC_TABLE[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+  function zipStore(entries) {
+    // entries: [{name, data: Uint8Array}] -> Blob (no compression; images are
+    // already compressed formats, so storing keeps size predictable)
+    var parts = [], central = [], offset = 0;
+    var enc = new TextEncoder();
+    entries.forEach(function (e) {
+      var nameBytes = enc.encode(e.name);
+      var crc = crc32(e.data);
+      var lh = new DataView(new ArrayBuffer(30));
+      lh.setUint32(0, 0x04034b50, true);
+      lh.setUint16(4, 20, true);
+      lh.setUint16(6, 0x0800, true); // UTF-8 filename
+      lh.setUint16(8, 0, true);      // stored
+      lh.setUint32(14, crc, true);
+      lh.setUint32(18, e.data.length, true);
+      lh.setUint32(22, e.data.length, true);
+      lh.setUint16(26, nameBytes.length, true);
+      lh.setUint16(28, 0, true);
+      parts.push(new Uint8Array(lh.buffer), nameBytes, e.data);
+      var ch = new DataView(new ArrayBuffer(46));
+      ch.setUint32(0, 0x02014b50, true);
+      ch.setUint16(4, 20, true);
+      ch.setUint16(6, 20, true);
+      ch.setUint16(8, 0x0800, true);
+      ch.setUint16(10, 0, true);
+      ch.setUint32(16, crc, true);
+      ch.setUint32(20, e.data.length, true);
+      ch.setUint32(24, e.data.length, true);
+      ch.setUint16(28, nameBytes.length, true);
+      ch.setUint32(42, offset, true);
+      central.push(new Uint8Array(ch.buffer), nameBytes);
+      offset += 30 + nameBytes.length + e.data.length;
+    });
+    var cdSize = central.reduce(function (n, part) { return n + part.length; }, 0);
+    var eo = new DataView(new ArrayBuffer(22));
+    eo.setUint32(0, 0x06054b50, true);
+    eo.setUint16(8, entries.length, true);
+    eo.setUint16(10, entries.length, true);
+    eo.setUint32(12, cdSize, true);
+    eo.setUint32(16, offset, true);
+    return new Blob(parts.concat(central, [new Uint8Array(eo.buffer)]), { type: 'application/zip' });
+  }
+  function unzip(buffer) {
+    var bytes = new Uint8Array(buffer);
+    var view = new DataView(buffer);
+    var eocd = -1;
+    for (var i = bytes.length - 22; i >= Math.max(0, bytes.length - 22 - 65536); i--) {
+      if (view.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+    }
+    if (eocd === -1) return Promise.reject(new Error('ZIPの終端レコードが見つかりません'));
+    var count = view.getUint16(eocd + 10, true);
+    var pos = view.getUint32(eocd + 16, true);
+    var dec = new TextDecoder('utf-8');
+    var files = new Map();
+    var chain = Promise.resolve();
+    for (var n = 0; n < count; n++) {
+      if (view.getUint32(pos, true) !== 0x02014b50) break;
+      var method = view.getUint16(pos + 10, true);
+      var compSize = view.getUint32(pos + 20, true);
+      var nameLen = view.getUint16(pos + 28, true);
+      var extraLen = view.getUint16(pos + 30, true);
+      var commentLen = view.getUint16(pos + 32, true);
+      var localOff = view.getUint32(pos + 42, true);
+      var name = dec.decode(bytes.subarray(pos + 46, pos + 46 + nameLen));
+      pos += 46 + nameLen + extraLen + commentLen;
+      (function (name, method, compSize, localOff) {
+        chain = chain.then(function () {
+          var lNameLen = view.getUint16(localOff + 26, true);
+          var lExtraLen = view.getUint16(localOff + 28, true);
+          var start = localOff + 30 + lNameLen + lExtraLen;
+          var data = bytes.subarray(start, start + compSize);
+          if (method === 0) { files.set(name, data.slice()); return; }
+          if (method === 8) {
+            return new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer()
+              .then(function (buf) { files.set(name, new Uint8Array(buf)); });
+          }
+          // unsupported method: skip the entry
+        });
+      })(name, method, compSize, localOff);
+    }
+    return chain.then(function () { return files; });
+  }
+  function extForType(type) {
+    if (type === 'image/jpeg') return 'jpg';
+    if (type === 'image/webp') return 'webp';
+    return 'png';
+  }
+  function typeForExt(ext) {
+    if (ext === 'jpg') return 'image/jpeg';
+    if (ext === 'webp') return 'image/webp';
+    return 'image/png';
+  }
+  function exportFullBackup() {
+    toast('バックアップを作成しています...');
+    var entries = [];
+    var lightweight = state.items.map(function (item) {
+      var copy = Object.assign({}, item);
+      delete copy.imageBlob; delete copy.thumbBlob;
+      return copy;
+    });
+    var manifest = { app: 'prompt-warehouse', version: 2, kind: 'full-backup', exportedAt: new Date().toISOString(), items: lightweight };
+    entries.push({ name: 'manifest.json', data: new TextEncoder().encode(JSON.stringify(manifest)) });
+    var chain = Promise.resolve();
+    state.items.forEach(function (item) {
+      if (!item.imageBlob || !item.fileHash) return;
+      chain = chain.then(function () {
+        return item.imageBlob.arrayBuffer().then(function (buf) {
+          entries.push({ name: 'images/' + item.fileHash + '.' + extForType(item.imageBlob.type), data: new Uint8Array(buf) });
+        });
+      });
+    });
+    chain.then(function () {
+      var zip = zipStore(entries);
+      var d = new Date();
+      var stamp = d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2);
+      download('prompt-warehouse-backup-' + stamp + '.zip', zip);
+      toast(state.items.length + ' 件のフルバックアップを書き出しました（' + Math.round(zip.size / 1024) + ' KB）');
+    }).catch(function () { toast('バックアップの作成に失敗しました'); });
+  }
+  function importItems(rawItems, resolveImage) {
+    var added = 0, attached = 0, skipped = 0;
+    var chain = Promise.resolve();
+    rawItems.forEach(function (raw) {
+      chain = chain.then(function () {
+        return resolveImage(raw).then(function (imageBlob) {
+          var existing = raw.fileHash ? state.items.find(function (i) { return i.fileHash && i.fileHash === raw.fileHash; }) : null;
+          if (existing) {
+            if (!existing.imageBlob && imageBlob) {
+              existing.imageBlob = imageBlob;
+              return makeThumbnail(imageBlob).then(function (thumb) {
+                existing.thumbBlob = thumb;
+                existing.updatedAt = Date.now();
+                return dbPut(existing).then(function () { attached++; });
+              });
+            }
+            skipped++;
+            return;
+          }
+          var item = Object.assign({ imageBlob: null, thumbBlob: null, tags: [], autoTags: [], loras: [], favorite: false }, raw);
+          item.imageBlob = imageBlob;
+          var thumbStep = imageBlob ? makeThumbnail(imageBlob).then(function (t) { item.thumbBlob = t; }) : Promise.resolve();
+          return thumbStep.then(function () {
+            return dbPut(item).then(function () { state.items.unshift(item); added++; });
+          });
+        });
+      });
+    });
+    return chain.then(function () { return { added: added, attached: attached, skipped: skipped }; });
+  }
+  function importBackupZip(file) {
+    file.arrayBuffer().then(function (buffer) {
+      return unzip(buffer);
+    }).then(function (files) {
+      var manifestBytes = files.get('manifest.json');
+      if (!manifestBytes) { toast('バックアップ形式が違うようです（manifest.json がありません）'); return; }
+      var data;
+      try { data = JSON.parse(new TextDecoder('utf-8').decode(manifestBytes)); } catch (e) { toast('バックアップの読み取りに失敗しました'); return; }
+      if (!data || !Array.isArray(data.items)) { toast('バックアップ形式が違うようです'); return; }
+      return importItems(data.items, function (raw) {
+        if (!raw.fileHash) return Promise.resolve(null);
+        var prefix = 'images/' + raw.fileHash + '.';
+        var hit = null;
+        files.forEach(function (v, k) { if (k.indexOf(prefix) === 0) hit = { name: k, data: v }; });
+        if (!hit) return Promise.resolve(null);
+        var ext = hit.name.substring(prefix.length);
+        return Promise.resolve(new Blob([hit.data], { type: typeForExt(ext) }));
+      }).then(function (res) {
+        var msg = res.added + ' 件を取り込みました';
+        if (res.attached) msg += '（既存 ' + res.attached + ' 件に画像を紐付け）';
+        if (res.skipped) msg += '（重複 ' + res.skipped + ' 件をスキップ）';
+        toast(msg);
+        render();
+      });
+    }).catch(function () { toast('バックアップの読み取りに失敗しました'); });
+  }
+
+  // ---------- export / import (lightweight JSON: metadata only) ----------
+  function exportJson() {
+    var data = {
+      app: 'prompt-warehouse', version: 1, exportedAt: new Date().toISOString(),
+      note: '軽量エクスポート: 画像データは含まれません。画像は fileHash が一致するファイルの再取り込みで紐付きます。',
+      items: state.items.map(function (item) {
+        var copy = Object.assign({}, item);
+        delete copy.imageBlob; delete copy.thumbBlob;
+        return copy;
+      })
+    };
+    download('prompt-warehouse-export.json', new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }));
+    toast(state.items.length + ' 件を書き出しました（画像は含みません）');
+  }
+  function importJson(file) {
+    file.text().then(function (text) {
+      var data;
+      try { data = JSON.parse(text); } catch (e) { toast('JSON の読み取りに失敗しました'); return; }
+      if (!data || !Array.isArray(data.items)) { toast('形式が違うようです'); return; }
+      importItems(data.items, function () { return Promise.resolve(null); }).then(function (res) {
+        toast(res.added + ' 件を取り込みました（重複 ' + res.skipped + ' 件をスキップ）');
+        render();
+      });
+    });
+  }
+
+  // ---------- events ----------
+  function bind() {
+    $('importBtn').addEventListener('click', function () { $('fileInput').click(); });
+    $('emptyImportBtn').addEventListener('click', function () { $('fileInput').click(); });
+    $('fileInput').addEventListener('change', function () { importFiles(this.files); this.value = ''; });
+    $('importJsonBtn').addEventListener('click', function () { $('jsonInput').click(); });
+    $('jsonInput').addEventListener('change', function () {
+      var f = this.files[0];
+      this.value = '';
+      if (!f) return;
+      if (/\.zip$/i.test(f.name)) importBackupZip(f); else importJson(f);
+    });
+    $('exportBtn').addEventListener('click', exportJson);
+    var driveIdInput = $('driveClientId');
+    try { driveIdInput.value = driveClientId(); } catch (e) {}
+    $('driveClientSaveBtn').addEventListener('click', function () {
+      try { localStorage.setItem('pw-drive-client-id', driveIdInput.value.trim()); } catch (e) {}
+      drive.client = null;
+      toast('クライアントIDを保存しました');
+      updateDriveUi();
+    });
+    var setMode = function (mode) {
+      appMode = mode;
+      try { localStorage.setItem('pw-storage-mode', mode); } catch (e) {}
+      updateDriveUi();
+      state.selectedId = null;
+      $('detail').hidden = true;
+      if (mode === 'drive') {
+        state.items = [];
+        render();
+        driveConnect(false).then(function (items) {
+          state.items = items.slice();
+          render();
+        }).catch(function (err) {
+          driveSetStatus('サインインが必要です（' + (err && err.message || err) + '）');
+        });
+      } else {
+        probeStorage().then(function () { return dbAll(); }).then(function (items) {
+          state.items = items.slice();
+          render();
+        });
+      }
+    };
+    $('modeLocalBtn').addEventListener('click', function () { if (appMode !== 'local') setMode('local'); });
+    $('modeDriveBtn').addEventListener('click', function () { if (appMode !== 'drive') setMode('drive'); });
+    $('driveSignInBtn').addEventListener('click', function () {
+      driveConnect(true).then(function (items) {
+        state.items = items.slice();
+        render();
+        toast('Googleドライブに接続しました');
+      }).catch(function (err) { toast('ドライブ接続に失敗しました: ' + (err && err.message || err)); });
+    });
+    $('fullExportBtn').addEventListener('click', exportFullBackup);
+    var tagsToggle = $('tagsToggle');
+    var setTagsCollapsed = function (collapsed) {
+      $('popularTags').hidden = collapsed;
+      tagsToggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+      try { localStorage.setItem('pw-tags-collapsed', collapsed ? '1' : '0'); } catch (e) {}
+    };
+    try { if (localStorage.getItem('pw-tags-collapsed') === '1') setTagsCollapsed(true); } catch (e) {}
+    tagsToggle.addEventListener('click', function () {
+      setTagsCollapsed(!$('popularTags').hidden);
+    });
+    $('themeBtn').addEventListener('click', function () {
+      var dark = document.documentElement.getAttribute('data-theme') === 'dark';
+      document.documentElement.setAttribute('data-theme', dark ? 'light' : 'dark');
+      try { localStorage.setItem('pw-theme', dark ? 'light' : 'dark'); } catch (e) {}
+    });
+    try {
+      if (localStorage.getItem('pw-theme') === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+    } catch (e) {}
+
+    document.querySelectorAll('.nav-row').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        document.querySelectorAll('.nav-row').forEach(function (b) { b.classList.remove('is-active'); });
+        btn.classList.add('is-active');
+        state.filter = btn.getAttribute('data-filter');
+        state.shown = PAGE;
+        render();
+      });
+    });
+    $('searchInput').addEventListener('input', function () { state.query = this.value; state.shown = PAGE; render(); });
+    $('sortSelect').addEventListener('change', function () { state.sort = this.value; render(); });
+    $('qualityToggle').addEventListener('change', function () { state.excludeQuality = this.checked; render(); });
+    $('moreBtn').addEventListener('click', function () { state.shown += PAGE; render(); });
+
+    var dragDepth = 0;
+    window.addEventListener('dragenter', function (e) { e.preventDefault(); dragDepth++; $('dropOverlay').hidden = false; });
+    window.addEventListener('dragleave', function (e) { dragDepth--; if (dragDepth <= 0) { dragDepth = 0; $('dropOverlay').hidden = true; } });
+    window.addEventListener('dragover', function (e) { e.preventDefault(); });
+    window.addEventListener('drop', function (e) {
+      e.preventDefault();
+      dragDepth = 0;
+      $('dropOverlay').hidden = true;
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) importFiles(e.dataTransfer.files);
+    });
+
+    $('detailClose').addEventListener('click', closeDetail);
+    $('favBtn').addEventListener('click', function () {
+      var item = currentItem(); if (!item) return;
+      item.favorite = !item.favorite; item.updatedAt = Date.now();
+      dbPut(item).then(function () { syncDetailFav(item); render(); });
+    });
+    $('deleteBtn').addEventListener('click', function () {
+      var item = currentItem(); if (!item) return;
+      if (!window.confirm('このカードを削除しますか？')) return;
+      dbDelete(item.id).then(function () {
+        releaseItemUrls(item.id);
+        state.items = state.items.filter(function (i) { return i.id !== item.id; });
+        closeDetail();
+        toast('削除しました');
+      });
+    });
+    $('copyPositiveBtn').addEventListener('click', function () { copyText($('editPositive').value, 'ポジティブプロンプト'); });
+    $('copyNegativeBtn').addEventListener('click', function () { copyText($('editNegative').value, 'ネガティブプロンプト'); });
+    $('copyFullBtn').addEventListener('click', function () { var item = currentItem(); if (item) copyText(fullText(item), '生成情報つき全文'); });
+    $('copyImageBtn').addEventListener('click', function () {
+      var item = currentItem(); if (!item) { toast('画像がありません'); return; }
+      if (!item.imageBlob && appMode === 'drive' && item.fileHash) {
+        var fid = driveRemoteFileId(item, 'full');
+        if (!fid) { toast('画像がありません'); return; }
+        driveEnsureToken(false).then(function () { return driveApi('files/' + fid + '?alt=media'); }).then(function (r) { return r.blob(); }).then(function (blob) {
+          item.imageBlob = blob;
+          $('copyImageBtn').click();
+        }).catch(function () { toast('画像の取得に失敗しました'); });
+        return;
+      }
+      if (!item.imageBlob) { toast('画像がありません'); return; }
+      if (navigator.clipboard && window.ClipboardItem) {
+        var data = {};
+        data[item.imageBlob.type || 'image/png'] = item.imageBlob;
+        navigator.clipboard.write([new ClipboardItem(data)]).then(function () { toast('画像をコピーしました'); }, function () { toast('画像コピーに失敗しました'); });
+      } else toast('このブラウザでは画像コピーに未対応です');
+    });
+    $('downloadWorkflowBtn').addEventListener('click', function () {
+      var item = currentItem(); if (!item || !item.workflowJson) return;
+      download((item.fileName || 'workflow').replace(/\.png$/i, '') + '-workflow.json', new Blob([item.workflowJson], { type: 'application/json' }));
+    });
+    $('saveEditBtn').addEventListener('click', function () {
+      var item = currentItem(); if (!item) return;
+      item.title = $('editTitle').value.trim();
+      item.tags = $('editTags').value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+      item.memo = $('editMemo').value;
+      item.positive = $('editPositive').value;
+      item.negative = $('editNegative').value;
+      item.autoTags = PW.normalizeAutoTags(item.positive).tags;
+      item.updatedAt = Date.now();
+      dbPut(item).then(function () { toast('保存しました'); render(); });
+    });
+    $('templateBtn').addEventListener('click', function () {
+      var item = {
+        id: (crypto.randomUUID ? crypto.randomUUID() : 'id-' + Date.now()),
+        title: '新しいテンプレート', fileName: '', fileHash: null,
+        sourceFormat: 'template', positive: '', negative: '', positiveAlt: [],
+        seed: null, steps: null, cfg: null, sampler: null, scheduler: null, denoise: null,
+        model: null, loras: [], unconnected: [], isImg2Img: false,
+        workflowJson: null, promptJson: null, rawParameters: null, a1111Params: null,
+        autoTags: [], lorasInPrompt: [], tags: [], memo: '', favorite: false,
+        imageBlob: null, thumbBlob: null, width: null, height: null, latentWidth: null, latentHeight: null,
+        createdAt: Date.now(), updatedAt: Date.now()
+      };
+      dbPut(item).then(function () {
+        state.items.unshift(item);
+        render();
+        openDetail(item.id);
+        toast('プロンプトだけの登録を作りました。詳細で編集してください');
+      });
+    });
+  }
+
+  // ---------- init ----------
+  bind();
+  updateDriveUi();
+  var initLoad = appMode === 'drive'
+    ? driveConnect(false).catch(function () { return []; })
+    : probeStorage().then(function () { return dbAll(); });
+  initLoad.then(function (items) {
+    state.items = items.sort(function (a, b) { return b.createdAt - a.createdAt; });
+    render();
+  }).catch(function (err) {
+    $('findingLine').textContent = 'データベースを開けませんでした: ' + (err && err.message || err);
+  });
+})();
+
+</script>
+</body>
+</html>
