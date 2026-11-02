@@ -861,7 +861,7 @@ button { cursor: pointer; }
   var FOLDER_NAME = 'prompt-warehouse';
   var appMode = 'local'; // 'local' | 'drive'
   var driveItemsCache = [];
-  var drive = { token: null, tokenExp: 0, folderId: null, indexId: null, fileIds: {}, ready: false, client: null, batchDepth: 0, lastIndexJson: '' };
+  var drive = { token: null, tokenExp: 0, folderId: null, indexId: null, fileIds: {}, ready: false, client: null, batchDepth: 0, lastIndexJson: '', pendingAuth: null };
   function driveClientId() { try { return localStorage.getItem('pw-drive-client-id') || ''; } catch (e) { return ''; } }
   function driveSetStatus(text) { var el = document.getElementById('driveStatus'); if (el) el.textContent = text; }
   function updateDriveUi() {
@@ -901,24 +901,53 @@ button { cursor: pointer; }
     return ensureGisLoaded().then(function () { return driveRequestToken(interactive); });
   }
   function driveRequestToken(interactive) {
-    return new Promise(function (resolve, reject) {
-      if (!drive.client) {
-        drive.client = google.accounts.oauth2.initTokenClient({
-          client_id: driveClientId(), scope: DRIVE_SCOPE,
-          callback: function (resp) {
-            if (resp && resp.access_token) {
-              drive.token = resp.access_token;
-              drive.tokenExp = Date.now() + ((resp.expires_in || 3600) * 1000);
-              updateDriveUi();
-              resolve(drive.token);
-            } else reject(new Error('サインインが完了しませんでした'));
-          },
-          error_callback: function () { reject(new Error('サインインできませんでした')); }
-        });
+    // The GIS token client is created once, but its callback must settle
+    // whoever is waiting NOW (drive.pendingAuth), not the promise that
+    // happened to create the client. Capturing the first call's resolve in
+    // the client callback left every later sign-in hanging after a reload:
+    // the boot-time silent request created the client, so a manual sign-in
+    // afterwards stored the token but never proceeded to load the index.
+    if (drive.pendingAuth) {
+      try { drive.client.requestAccessToken({ prompt: interactive ? 'consent' : '' }); } catch (e) { /* keep waiting on the in-flight request */ }
+      return drive.pendingAuth.promise;
+    }
+    var resolveFn = null, rejectFn = null;
+    var promise = new Promise(function (res, rej) { resolveFn = res; rejectFn = rej; });
+    var timer = setTimeout(function () {
+      if (drive.pendingAuth && drive.pendingAuth.promise === promise) {
+        drive.pendingAuth = null;
+        rejectFn(new Error('サインインがタイムアウトしました。もう一度お試しください'));
       }
-      try { drive.client.requestAccessToken({ prompt: interactive ? 'consent' : '' }); }
-      catch (e) { reject(e); }
-    });
+    }, 180000);
+    drive.pendingAuth = { promise: promise, resolve: resolveFn, reject: rejectFn, timer: timer };
+    if (!drive.client) {
+      drive.client = google.accounts.oauth2.initTokenClient({
+        client_id: driveClientId(), scope: DRIVE_SCOPE,
+        callback: function (resp) {
+          if (resp && resp.access_token) {
+            drive.token = resp.access_token;
+            drive.tokenExp = Date.now() + ((resp.expires_in || 3600) * 1000);
+            updateDriveUi();
+          }
+          var w = drive.pendingAuth; drive.pendingAuth = null;
+          if (w) {
+            clearTimeout(w.timer);
+            if (resp && resp.access_token) w.resolve(drive.token);
+            else w.reject(new Error('サインインが完了しませんでした'));
+          }
+        },
+        error_callback: function () {
+          var w = drive.pendingAuth; drive.pendingAuth = null;
+          if (w) { clearTimeout(w.timer); w.reject(new Error('サインインできませんでした')); }
+        }
+      });
+    }
+    try { drive.client.requestAccessToken({ prompt: interactive ? 'consent' : '' }); }
+    catch (e) {
+      var w2 = drive.pendingAuth; drive.pendingAuth = null;
+      if (w2) { clearTimeout(w2.timer); w2.reject(e); }
+    }
+    return promise;
   }
   function driveApi(path, opts) {
     opts = opts || {};
