@@ -222,6 +222,8 @@ button { cursor: pointer; }
 }
 .viewer-top, .viewer-bottom, .viewer-nav { transition: opacity 0.25s ease; }
 .viewer.is-zoomed .viewer-top, .viewer.is-zoomed .viewer-bottom, .viewer.is-zoomed .viewer-nav { opacity: 0; pointer-events: none; }
+.viewer-slide img { transition: width 0.26s ease, height 0.26s ease; }
+.viewer.is-zoomed .viewer-slide img { max-width: none; max-height: none; }
 
 </style>
 </head>
@@ -1610,6 +1612,31 @@ button { cursor: pointer; }
   function setViewerZoom(on) {
     viewer.zoom = !!on;
     $('viewer').classList.toggle('is-zoomed', viewer.zoom);
+    applyZoomImg();
+  }
+  // In zoom mode the centre image is laid out at its true on-screen size
+  // instead of being transform-scaled, so the browser rasterises the
+  // original bitmap at the displayed size and it stays sharp.
+  function applyZoomImg() {
+    var track = $('viewerTrack');
+    if (!track) return;
+    var cur = viewerIndex();
+    for (var i = 0; i < track.children.length; i++) {
+      var img = track.children[i].querySelector('img');
+      if (!img) continue;
+      if (viewer.zoom && i === cur && !img.naturalWidth && !img._zoomHook) {
+        img._zoomHook = true;
+        img.addEventListener('load', function () { applyZoomImg(); });
+      }
+      if (viewer.zoom && i === cur && img.naturalWidth) {
+        var s = Math.min(window.innerWidth / img.naturalWidth, window.innerHeight / img.naturalHeight);
+        img.style.width = Math.round(img.naturalWidth * s) + 'px';
+        img.style.height = Math.round(img.naturalHeight * s) + 'px';
+      } else {
+        img.style.width = '';
+        img.style.height = '';
+      }
+    }
   }
   var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   function viewerIndex() {
@@ -1741,6 +1768,7 @@ button { cursor: pointer; }
     $('viewerNext').disabled = idx >= viewer.list.length - 1;
     for (var k = idx - 3; k <= idx + 3; k++) if (k >= 0 && k < viewer.list.length) ensureSlideImage(k);
     upgradeCenterImage();
+    applyZoomImg();
   }
   function viewerPaint() {
     var track = $('viewerTrack');
@@ -1753,20 +1781,7 @@ button { cursor: pointer; }
       if (Math.abs(d) > 4.2) { slide.style.display = 'none'; continue; }
       slide.style.display = '';
       var ad = Math.abs(d);
-      var shrink = 1 - Math.min(ad, 1) * 0.17 * (1 - blend);
-      var fit = 1;
-      if (blend > 0) {
-        var fitS = viewer.fitScale;
-        var imgEl = slide.querySelector('img');
-        if (imgEl && imgEl.naturalWidth && slide.offsetWidth) {
-          var s0 = Math.min(slide.offsetWidth / imgEl.naturalWidth, slide.offsetHeight / imgEl.naturalHeight);
-          var rw = imgEl.naturalWidth * s0;
-          var rh = imgEl.naturalHeight * s0;
-          if (rw > 0 && rh > 0) fitS = Math.max(1, Math.min(4, Math.min(window.innerWidth / rw, window.innerHeight / rh)));
-        }
-        fit = 1 + (fitS - 1) * blend * (1 - Math.min(ad, 1));
-      }
-      var scale = shrink * fit;
+      var scale = 1 - Math.min(ad, 1) * 0.17 * (1 - blend);
       var opacity = 1 - Math.min(ad, 1.8) * 0.34 * (1 - blend);
       slide.style.transform = 'translate(-50%, -50%) translateX(' + (d * spacing).toFixed(1) + 'px) translateY(' + (viewer.stageDy * blend).toFixed(1) + 'px) scale(' + scale.toFixed(3) + ')';
       slide.style.opacity = opacity.toFixed(3);
