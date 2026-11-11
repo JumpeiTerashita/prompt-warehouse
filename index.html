@@ -2210,7 +2210,25 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
     return (h >>> 0) / 4294967296;
   }
+  // Content stamp for memoisation: every mutation path bumps an
+  // item's updatedAt (imports add ids, deletes remove them), so
+  // id + updatedAt + favorite captures anything filtering or the
+  // sidebar counts can depend on.
+  function itemsStamp() {
+    var h = state.items.length + ':';
+    for (var i = 0; i < state.items.length; i++) {
+      var it = state.items[i];
+      var s = it.id + '|' + (it.updatedAt || 0) + '|' + (it.favorite ? 1 : 0);
+      var x = 0;
+      for (var j = 0; j < s.length; j++) x = (Math.imul(x, 31) + s.charCodeAt(j)) | 0;
+      h += x + ',';
+    }
+    return h;
+  }
+  var filteredCache = { key: '', list: null };
   function filteredItems() {
+    var cacheKey = itemsStamp() + '|' + state.query + '|' + state.filter + '|' + state.batch + '|' + state.chara + '|' + state.activeTags.join(',') + '|' + state.sort;
+    if (filteredCache.key === cacheKey && filteredCache.list) return filteredCache.list;
     // Query syntax: space = AND, ' OR ' between groups = either group,
     // '-word' = exclude. Plain multi-word queries behave as before.
     var rawQ = state.query.trim().toLowerCase();
@@ -2263,6 +2281,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       if (state.sort === 'random') return shuffleKey(a) - shuffleKey(b);
       return b.createdAt - a.createdAt;
     });
+    filteredCache = { key: cacheKey, list: list };
     return list;
   }
 
@@ -2290,7 +2309,10 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     return ids;
   }
 
+  var popularCache = { key: '', entries: null };
   function popularTags() {
+    var pKey = itemsStamp() + '|q' + (state.excludeQuality ? '1' : '0');
+    if (popularCache.key === pKey && popularCache.entries) return popularCache.entries;
     var counts = {};
     state.items.forEach(function (item) {
       (item.autoTags || []).forEach(function (t) { counts[t] = (counts[t] || 0) + 1; });
@@ -2300,16 +2322,32 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       entries = entries.filter(function (e) { return PW.QUALITY_TAGS.indexOf(e.tag) === -1; });
     }
     entries.sort(function (a, b) { return b.count - a.count || a.tag.localeCompare(b.tag); });
-    return entries.slice(0, 30);
+    popularCache = { key: pKey, entries: entries.slice(0, 30) };
+    return popularCache.entries;
   }
 
+  var countsCache = { stamp: '', fav: 0, imageonly: 0, comfy: 0, a1111: 0 };
+  function navCounts() {
+    var stamp = itemsStamp();
+    if (countsCache.stamp === stamp) return countsCache;
+    var c = { stamp: stamp, fav: 0, imageonly: 0, comfy: 0, a1111: 0 };
+    state.items.forEach(function (i) {
+      if (i.favorite) c.fav++;
+      if (i.sourceFormat === 'none') c.imageonly++;
+      else if (i.sourceFormat === 'comfy') c.comfy++;
+      else if (i.sourceFormat === 'a1111') c.a1111++;
+    });
+    countsCache = c;
+    return c;
+  }
   function render() {
     $('totalCount').textContent = state.items.length;
     $('countAll').textContent = state.items.length;
-    $('countFav').textContent = state.items.filter(function (i) { return i.favorite; }).length;
-    $('countImageOnly').textContent = state.items.filter(function (i) { return i.sourceFormat === 'none'; }).length;
-    $('countComfy').textContent = state.items.filter(function (i) { return i.sourceFormat === 'comfy'; }).length;
-    $('countA1111').textContent = state.items.filter(function (i) { return i.sourceFormat === 'a1111'; }).length;
+    var nc = navCounts();
+    $('countFav').textContent = nc.fav;
+    $('countImageOnly').textContent = nc.imageonly;
+    $('countComfy').textContent = nc.comfy;
+    $('countA1111').textContent = nc.a1111;
     $('countDup').textContent = duplicateIds().size;
 
     var tagUl = $('popularTags');
@@ -2659,13 +2697,8 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     viewer.vel = 0;
     var track = $('viewerTrack');
     track.innerHTML = '';
-    list.forEach(function (item, i) {
-      var slide = document.createElement('div');
-      slide.className = 'viewer-slide';
-      slide.setAttribute('data-slide-id', item.id);
-      slide.setAttribute('data-index', String(i));
-      track.appendChild(slide);
-    });
+    viewer._winCenter = -999;
+    ensureSlideWindow();
     var ticks = $('viewerTicks');
     ticks.innerHTML = '';
     var tickCount = Math.min(list.length, 90);
@@ -2705,9 +2738,35 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     }
     viewer.tween = { from: viewer.pos, to: idx, start: performance.now(), dur: Math.min(400, 160 + Math.abs(idx - viewer.pos) * 80) };
   }
-  function ensureSlideImage(i) {
+  // Slide virtualisation: only a window of slides around the current
+  // position exists in the DOM (was: one node per library item, all
+  // re-styled every animation frame). Slides are transform-positioned,
+  // so DOM order is irrelevant; data-index carries the list position.
+  var VIEWER_RADIUS = 8;
+  function slideEl(i) { return $('viewerTrack').querySelector('[data-index="' + i + '"]'); }
+  function ensureSlideWindow() {
+    if (!viewer.list || !viewer.list.length) return;
+    var center = Math.round(viewer.pos);
+    if (viewer._winCenter === center) return;
+    viewer._winCenter = center;
     var track = $('viewerTrack');
-    var slide = track.children[i];
+    var lo = Math.max(0, center - VIEWER_RADIUS), hi = Math.min(viewer.list.length - 1, center + VIEWER_RADIUS);
+    for (var i = lo; i <= hi; i++) {
+      if (!slideEl(i)) {
+        var slide = document.createElement('div');
+        slide.className = 'viewer-slide';
+        slide.setAttribute('data-slide-id', viewer.list[i].id);
+        slide.setAttribute('data-index', String(i));
+        track.appendChild(slide);
+      }
+    }
+    Array.prototype.slice.call(track.children).forEach(function (el) {
+      var ix = parseInt(el.getAttribute('data-index'), 10);
+      if (ix < center - VIEWER_RADIUS - 4 || ix > center + VIEWER_RADIUS + 4) el.remove();
+    });
+  }
+  function ensureSlideImage(i) {
+    var slide = slideEl(i);
     if (!slide || slide.getAttribute('data-filled')) return;
     var item = viewer.list[i];
     slide.setAttribute('data-filled', '1');
@@ -2737,7 +2796,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
   }
   function doUpgradeCenter(i) {
     if (!viewer.open || viewerIndex() !== i) return;
-    var slide = $('viewerTrack').children[i];
+    var slide = slideEl(i);
     if (!slide) return;
     var img = slide.querySelector('img');
     if (!img || img.getAttribute('data-upgraded')) return;
@@ -2775,12 +2834,13 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     upgradeCenterImage();
   }
   function viewerPaint() {
+    ensureSlideWindow();
     var track = $('viewerTrack');
     var n = viewer.list.length;
     var spacing = viewer.spacing;
     for (var i = 0; i < track.children.length; i++) {
       var slide = track.children[i];
-      var d = i - viewer.pos;
+      var d = parseInt(slide.getAttribute('data-index'), 10) - viewer.pos;
       if (Math.abs(d) > 4.2) { slide.style.display = 'none'; continue; }
       slide.style.display = '';
       var ad = Math.abs(d);
