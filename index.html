@@ -569,6 +569,14 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
 
 <script>
 /* Prompt Warehouse parser (stage-0 validated rules, 2026-11-02)
+   MODULE BOUNDARY (Phase 4c): this first script block is the parser
+   module. It exposes only window.PWParser (isPng / parsePngTexts /
+   parseComfy / parseA1111 / normalizeAutoTags / QUALITY_TAGS) and
+   must not touch the DOM or app state; the app script below consumes
+   that API only. A Python port lives in the direct-registration tool
+   (pw_parser.py). DRIFT RULE: any change to this module is complete
+   only when the same PNG set passes both parsers with a zero
+   field-level diff (prompt-warehouse-tests/parser-diff.js).
    - PNG text chunks: tEXt / zTXt / iTXt, no external libraries
    - ComfyUI: trace links from the primary sampler (DFS for conditioning,
      chain tracing for model/LoRA). Never scan-all for model/LoRA:
