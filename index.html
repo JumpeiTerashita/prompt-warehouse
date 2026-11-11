@@ -1222,31 +1222,57 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
   // screen from going black while a multi-MB original downloads.
   function showProgressive(img, item) {
     img._pwItemId = item.id;
-    var localFull = getImageUrl(item, 'full');
-    var localThumb = getImageUrl(item, 'thumb');
-    if (localFull || localThumb) {
-      if (localFull && localThumb && localFull !== localThumb) {
-        img.src = localThumb;
-        var pre = new Image();
-        pre.onload = function () { if (img._pwItemId === item.id && img.isConnected) img.src = localFull; };
-        pre.src = localFull;
-      } else if (localFull || localThumb) {
-        img.src = localFull || localThumb;
-      }
+    img.removeAttribute('data-full-done');
+    // getImageUrl returns a URL synchronously when it is already available:
+    // a local blob, or (in drive mode) a file fetched earlier this session.
+    var full = getImageUrl(item, 'full');
+    var thumb = getImageUrl(item, 'thumb');
+    if (full && thumb && full !== thumb && appMode !== 'drive') {
+      // Local blobs: show the thumbnail in the same frame and swap once the
+      // full image has decoded, so a big PNG never blanks the view.
+      img.src = thumb;
+      var pre = new Image();
+      pre.onload = function () {
+        if (img._pwItemId === item.id && img.isConnected) {
+          img.setAttribute('data-full-done', '1');
+          img.src = full;
+        }
+      };
+      pre.src = full;
       return;
     }
+    if (full) {
+      // Already in hand (a cached drive file, or a blob without a separate
+      // thumbnail): show it in the same frame, no async hop at all.
+      img.setAttribute('data-full-done', '1');
+      img.src = full;
+      return;
+    }
+    if (thumb) img.src = thumb; // reduced version first, this same frame
     if (appMode === 'drive' && item.fileHash) {
-      ensureRemoteUrl(item, 'thumb').then(function (url) {
-        if (url && img._pwItemId === item.id && img.isConnected && !img.getAttribute('data-full-done')) img.src = url;
-      });
+      // Fetch the full image unconditionally. The previous shape returned
+      // early whenever a cached thumbnail existed, which left fast lightbox
+      // swipes stuck on the low-res thumbnail and made the swap feel stuck.
+      if (!thumb) {
+        ensureRemoteUrl(item, 'thumb').then(function (url) {
+          if (url && img._pwItemId === item.id && img.isConnected && !img.getAttribute('data-full-done')) img.src = url;
+        });
+      }
       ensureRemoteUrl(item, 'full').then(function (url) {
-        if (url && img._pwItemId === item.id && img.isConnected) { img.setAttribute('data-full-done', '1'); img.src = url; }
+        if (url && img._pwItemId === item.id && img.isConnected) {
+          img.setAttribute('data-full-done', '1');
+          img.src = url;
+        }
       });
     }
   }
   function prefetchFull(item) {
     if (!item) return;
     if (appMode === 'drive' && item.fileHash && !getImageUrl(item, 'full')) ensureRemoteUrl(item, 'full');
+  }
+  function prefetchThumb(item) {
+    if (!item) return;
+    if (appMode === 'drive' && item.fileHash && !getImageUrl(item, 'thumb')) ensureRemoteUrl(item, 'thumb');
   }
   function driveRefresh() {
     if (appMode !== 'drive' || !drive.ready || !drive.indexId || state.selectedId) return;
@@ -1844,9 +1870,15 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     img.removeAttribute('data-full-done');
     if (!item) { img.removeAttribute('src'); return; }
     showProgressive(img, item);
-    // Warm the neighbours so swiping feels instant.
-    prefetchFull(viewer.list[lightbox.idx - 1]);
-    prefetchFull(viewer.list[lightbox.idx + 1]);
+    // Warm the neighbours so a swipe lands on images already in hand:
+    // full images one step out, thumbnails two steps out (the thumbnail is
+    // what a fast swipe shows first, so it must be cached by then).
+    [lightbox.idx - 1, lightbox.idx + 1].forEach(function (j) {
+      prefetchThumb(viewer.list[j]);
+      prefetchFull(viewer.list[j]);
+    });
+    prefetchThumb(viewer.list[lightbox.idx - 2]);
+    prefetchThumb(viewer.list[lightbox.idx + 2]);
   }
   function openLightbox(idx) {
     lightbox.open = true;
@@ -1973,13 +2005,26 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       slide.innerHTML = '<img alt="" draggable="false" src="' + (thumb || full) + '" data-full="' + (full || '') + '">';
     } else if (appMode === 'drive' && item.fileHash) {
       slide.innerHTML = '<img alt="" draggable="false" data-remote="' + item.id + '|thumb" data-full-remote="' + item.id + '|full">';
-      hydrateRemoteImages(slide);
+      // Fetch now, not via the grid's IntersectionObserver: slides are only
+      // built a few around the current one, and waiting for the observer
+      // left grey, empty slides while swiping.
+      loadRemoteImg(slide.querySelector('img'));
     } else {
       slide.innerHTML = '<span class="no-image">画像なし（プロンプトのみの登録）</span>';
     }
   }
+  var upgradeTimer = 0;
   function upgradeCenterImage() {
+    // Wait until the carousel settles on a slide (~140ms without the centre
+    // changing) before spending bandwidth and decode time on its full image.
+    // Upgrading every slide a fast flick passes made the downloads compete
+    // with the thumbnails and hitched the swipe itself.
     var i = viewerIndex();
+    clearTimeout(upgradeTimer);
+    upgradeTimer = setTimeout(function () { doUpgradeCenter(i); }, 140);
+  }
+  function doUpgradeCenter(i) {
+    if (!viewer.open || viewerIndex() !== i) return;
     var slide = $('viewerTrack').children[i];
     if (!slide) return;
     var img = slide.querySelector('img');
@@ -1991,8 +2036,10 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       // Do NOT blank the slide: the thumbnail stays visible until the full
       // image is in hand, then it swaps in one step.
       ensureRemoteUrl(item, 'full').then(function (url) { if (url && img.isConnected) img.src = url; });
-      prefetchFull(viewer.list[i - 1]);
-      prefetchFull(viewer.list[i + 1]);
+      [i - 1, i + 1].forEach(function (j) {
+        prefetchThumb(viewer.list[j]);
+        prefetchFull(viewer.list[j]);
+      });
       return;
     }
     var full = img.getAttribute('data-full');
