@@ -129,6 +129,12 @@ button { cursor: pointer; }
 .card-title { font-weight: 600; overflow-wrap: anywhere; }
 .card-tags { display: flex; flex-wrap: wrap; gap: 5px; }
 .pill { background: var(--raised); border: 0; border-radius: 999px; padding: 2px 9px; font-size: var(--fs-small); color: var(--text); }
+button.pill { cursor: pointer; font: inherit; }
+button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
+.card:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.grid.fit-contain .card-thumb img { object-fit: contain; }
+#thumbFitSelect { height: 38px; border: 1px solid var(--control); border-radius: var(--radius-control); background: var(--surface); padding: 0 8px; }
+#toastAction { margin-left: 10px; border: 0; border-radius: 999px; padding: 3px 12px; background: var(--accent); color: #fff; font-size: var(--fs-small); cursor: pointer; }
 .pill-auto { color: var(--muted); }
 .pill-lora { background: var(--accent-soft); color: var(--accent-ink); }
 .card-prompt { color: var(--muted); font-size: var(--fs-small); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; margin: 0; }
@@ -225,6 +231,41 @@ button { cursor: pointer; }
 .lightbox[hidden] { display: none; }
 .lightbox img { width: 100%; height: 100%; object-fit: contain; display: block; user-select: none; -webkit-user-drag: none; }
 
+
+/* ---------- Phase 1 mobile-first viewing (2026-11-11) ----------
+   Primary use is browsing on a phone; importing happens on PC.
+   Goals: gallery reachable fast, big tap targets, no iOS focus zoom. */
+@media (max-width: 900px) {
+  #sidebar { gap: 12px; padding: 12px 14px 10px; }
+  .brand-count { font-size: 11px; }
+  .side-nav { flex-direction: row; overflow-x: auto; gap: 6px; padding-bottom: 2px; -webkit-overflow-scrolling: touch; }
+  .nav-row { flex: 0 0 auto; height: 36px; gap: 8px; }
+  .side-section h2 { margin-bottom: 6px; }
+  .seg-btn { height: 36px; }
+  .side-foot { flex-direction: row; flex-wrap: wrap; gap: 6px; }
+  .side-action { flex: 1 1 42%; height: 36px; }
+  .side-note { flex: 1 1 100%; margin: 2px 0 0; }
+  #canvas { padding: 16px 12px 56px; }
+  .title-row h1 { font-size: 22px; }
+  .title-actions { width: 100%; }
+  .title-actions .btn { flex: 1 1 0; min-height: 40px; }
+  .filter-row { flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+  #searchInput { flex: 1 1 100%; height: 42px; font-size: 16px; }
+  #sortSelect, #thumbFitSelect { flex: 1 1 0; height: 38px; }
+  .grid { gap: 10px; margin-top: 14px; }
+  .card-body { padding: 9px 10px 11px; gap: 5px; }
+  .card-title { font-size: 13px; }
+  .card-prompt { -webkit-line-clamp: 2; }
+  button.pill { padding: 4px 9px; min-height: 26px; }
+  .card-star { font-size: 18px; padding: 2px; }
+  .field input, .field textarea, .prompt-block textarea { font-size: 16px; min-height: 36px; }
+  .detail-actions .btn { min-height: 38px; }
+  .more-btn { min-height: 42px; padding: 0 26px; }
+  #toast { bottom: calc(20px + env(safe-area-inset-bottom)); max-width: 92vw; text-align: center; }
+  .viewer-bottom { padding-bottom: calc(18px + env(safe-area-inset-bottom)); }
+  .viewer-btn { height: 40px; }
+  .viewer-icon-btn { width: 40px; height: 40px; }
+}
 </style>
 </head>
 <body>
@@ -300,11 +341,17 @@ button { cursor: pointer; }
       いま開いている環境では、ブラウザの保存領域がブロックされているため、登録はこの表示を閉じるまでの仮保存になります。ファイルをダウンロードしてブラウザで直接開くと、登録が残ります。
     </div>
     <div class="filter-row">
-      <input id="searchInput" type="search" placeholder="プロンプト、ファイル名、タイトルから検索..." aria-label="検索">
+      <input id="searchInput" type="search" placeholder="プロンプト、ファイル名、seed、LoRA、モデル、サイズから検索..." aria-label="検索">
       <select id="sortSelect" aria-label="並び替え">
         <option value="new">新しい順</option>
         <option value="old">古い順</option>
         <option value="title">タイトル順</option>
+        <option value="fav">お気に入り優先</option>
+        <option value="random">ランダム</option>
+      </select>
+      <select id="thumbFitSelect" aria-label="サムネイル表示">
+        <option value="crop">サムネイル: トリミング</option>
+        <option value="contain">サムネイル: 全体表示</option>
       </select>
     </div>
     <div id="activeTags" class="active-tags" hidden></div>
@@ -340,6 +387,7 @@ button { cursor: pointer; }
         <button id="deleteBtn" class="btn btn-danger" type="button">削除</button>
       </div>
 
+      <div id="detailTags" class="card-tags" hidden></div>
       <label class="field"><span>タイトル</span><input id="editTitle" type="text"></label>
       <label class="field"><span>タグ（カンマ区切り）</span><input id="editTags" type="text"></label>
       <label class="field"><span>メモ</span><textarea id="editMemo" rows="2"></textarea></label>
@@ -394,7 +442,7 @@ button { cursor: pointer; }
 </div>
 
 <div id="dropOverlay" hidden><p>離して取り込み</p></div>
-<div id="toast" role="status" aria-live="polite" hidden></div>
+<div id="toast" role="status" aria-live="polite" hidden><span id="toastMsg"></span><button id="toastAction" type="button" hidden></button></div>
 <input id="fileInput" type="file" accept="image/png,image/jpeg,image/webp" multiple hidden>
 <input id="jsonInput" type="file" accept=".json,.zip,application/json,application/zip" hidden>
 
@@ -1177,12 +1225,21 @@ button { cursor: pointer; }
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   }
-  function toast(msg) {
+  function toast(msg, action) {
     var el = $('toast');
-    el.textContent = msg;
+    $('toastMsg').textContent = msg;
+    var btn = $('toastAction');
+    if (action && action.label && action.fn) {
+      btn.textContent = action.label;
+      btn.hidden = false;
+      btn.onclick = function () { el.hidden = true; action.fn(); };
+    } else {
+      btn.hidden = true;
+      btn.onclick = null;
+    }
     el.hidden = false;
     clearTimeout(toast._t);
-    toast._t = setTimeout(function () { el.hidden = true; }, 2200);
+    toast._t = setTimeout(function () { el.hidden = true; }, action ? 10000 : 2200);
   }
   var urlCache = {};
   function getImageUrl(item, kind) {
@@ -1269,6 +1326,9 @@ button { cursor: pointer; }
   }
 
   // ---------- state ----------
+  function storedPref(key, fallback) {
+    try { var v = localStorage.getItem(key); return v === null ? fallback : v; } catch (e) { return fallback; }
+  }
   var state = {
     items: [],
     filter: 'all',
@@ -1277,8 +1337,45 @@ button { cursor: pointer; }
     sort: 'new',
     shown: 100,
     selectedId: null,
-    excludeQuality: false
+    excludeQuality: storedPref('pw-exclude-quality', '1') !== '0',
+    thumbFit: storedPref('pw-thumb-fit', 'crop') === 'contain' ? 'contain' : 'crop',
+    shuffleSeed: String(Math.floor(Math.random() * 1e9)),
+    pendingItemId: null
   };
+  var detailDirty = false;
+  function toggleTag(tag) {
+    var i = state.activeTags.indexOf(tag);
+    if (i === -1) state.activeTags.push(tag); else state.activeTags.splice(i, 1);
+    state.shown = PAGE;
+    render();
+  }
+  // ---------- URL hash state (shareable / restorable view state) ----------
+  function syncHash() {
+    var params = new URLSearchParams();
+    if (state.query) params.set('q', state.query);
+    if (state.filter !== 'all') params.set('f', state.filter);
+    if (state.activeTags.length) params.set('tags', state.activeTags.join(','));
+    if (state.sort !== 'new') params.set('sort', state.sort);
+    if (state.thumbFit !== 'crop') params.set('fit', state.thumbFit);
+    if (state.selectedId) params.set('item', state.selectedId);
+    var hash = params.toString();
+    var url = hash ? '#' + hash : location.pathname + location.search;
+    try { history.replaceState(null, '', url); } catch (e) { /* file:// etc. */ }
+  }
+  function applyHash() {
+    if (!location.hash || location.hash.length < 2) return;
+    var params;
+    try { params = new URLSearchParams(location.hash.slice(1)); } catch (e) { return; }
+    if (params.get('q')) state.query = params.get('q');
+    var f = params.get('f');
+    if (['all', 'favorite', 'imageonly', 'comfy', 'a1111'].indexOf(f) !== -1) state.filter = f;
+    if (params.get('tags')) state.activeTags = params.get('tags').split(',').filter(Boolean);
+    var s = params.get('sort');
+    if (['new', 'old', 'title', 'fav', 'random'].indexOf(s) !== -1) state.sort = s;
+    var fit = params.get('fit');
+    if (fit === 'contain' || fit === 'crop') state.thumbFit = fit;
+    if (params.get('item')) state.pendingItemId = params.get('item');
+  }
   var PAGE = 100;
 
   // ---------- import ----------
@@ -1403,6 +1500,13 @@ button { cursor: pointer; }
   }
 
   // ---------- filtering / rendering ----------
+  function shuffleKey(item) {
+    // Deterministic per-session shuffle: stable across re-renders and paging,
+    // reshuffled only when the user re-selects the random sort.
+    var s = state.shuffleSeed + ':' + item.id, h = 2166136261;
+    for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return (h >>> 0) / 4294967296;
+  }
   function filteredItems() {
     var q = state.query.trim().toLowerCase();
     var words = q ? q.split(/\s+/) : [];
@@ -1417,6 +1521,13 @@ button { cursor: pointer; }
       }
       if (words.length) {
         var hay = [item.positive, item.negative, item.title, item.memo, item.model, item.fileName,
+          item.seed != null ? String(item.seed) : '', item.sampler || '', item.scheduler || '',
+          item.sourceFormat || '',
+          item.steps != null ? String(item.steps) : '', item.cfg != null ? String(item.cfg) : '',
+          item.width ? item.width + 'x' + item.height : '', item.latentWidth ? item.latentWidth + 'x' + item.latentHeight : '',
+          fmtDate(item.createdAt),
+          (item.loras || []).map(function (l) { return l.name; }).join(' '),
+          (item.lorasInPrompt || []).map(function (l) { return l.name; }).join(' '),
           (item.tags || []).join(' '), (item.autoTags || []).join(' ')].join('\n').toLowerCase();
         for (var j = 0; j < words.length; j++) if (hay.indexOf(words[j]) === -1) return false;
       }
@@ -1425,6 +1536,8 @@ button { cursor: pointer; }
     list.sort(function (a, b) {
       if (state.sort === 'old') return a.createdAt - b.createdAt;
       if (state.sort === 'title') return String(a.title || a.fileName).localeCompare(String(b.title || b.fileName), 'ja');
+      if (state.sort === 'fav') return (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0) || b.createdAt - a.createdAt;
+      if (state.sort === 'random') return shuffleKey(a) - shuffleKey(b);
       return b.createdAt - a.createdAt;
     });
     return list;
@@ -1472,7 +1585,13 @@ button { cursor: pointer; }
     $('emptyState').hidden = state.items.length !== 0;
     $('noResultState').hidden = !(state.items.length !== 0 && list.length === 0);
 
+    $('sortSelect').value = state.sort;
+    $('thumbFitSelect').value = state.thumbFit;
+    $('qualityToggle').checked = state.excludeQuality;
+    document.querySelectorAll('.nav-row').forEach(function (b) { b.classList.toggle('is-active', b.getAttribute('data-filter') === state.filter); });
+
     var grid = $('grid');
+    grid.className = 'grid' + (state.thumbFit === 'contain' ? ' fit-contain' : '');
     grid.innerHTML = '';
     list.slice(0, state.shown).forEach(function (item) {
       var card = document.createElement('article');
@@ -1481,21 +1600,38 @@ button { cursor: pointer; }
       var remoteThumb = (!thumbUrl && appMode === 'drive' && item.fileHash) ? item.id + '|thumb' : null;
       var title = item.title || item.fileName || '（タイトルなし）';
       var pills = '';
-      (item.tags || []).slice(0, 4).forEach(function (t) { pills += '<span class="pill">' + esc(t) + '</span>'; });
-      if (!(item.tags || []).length) (item.autoTags || []).slice(0, 4).forEach(function (t) { pills += '<span class="pill pill-auto">' + esc(t) + '</span>'; });
-      (item.loras || []).forEach(function (l) { pills += '<span class="pill pill-lora">' + esc(l.name.replace(/\.safetensors$/, '')) + (l.strengthModel != null ? ' ' + l.strengthModel : '') + '</span>'; });
-      if (item.sourceFormat === 'comfy') pills += '<span class="pill pill-auto">comfyUI</span>';
-      if (item.sourceFormat === 'a1111') pills += '<span class="pill pill-auto">A1111</span>';
+      (item.tags || []).slice(0, 4).forEach(function (t) { pills += '<button type="button" class="pill" data-tag="' + esc(t) + '" title="このタグで絞り込む">' + esc(t) + '</button>'; });
+      if (!(item.tags || []).length) (item.autoTags || []).filter(function (t) { return !state.excludeQuality || PW.QUALITY_TAGS.indexOf(t) === -1; }).slice(0, 4).forEach(function (t) { pills += '<button type="button" class="pill pill-auto" data-tag="' + esc(t) + '" title="このタグで絞り込む">' + esc(t) + '</button>'; });
+      (item.loras || []).forEach(function (l) { pills += '<button type="button" class="pill pill-lora" data-search="' + esc(l.name.replace(/\.safetensors$/, '')) + '" title="このLoRAで検索">' + esc(l.name.replace(/\.safetensors$/, '')) + (l.strengthModel != null ? ' ' + l.strengthModel : '') + '</button>'; });
+      if (item.sourceFormat === 'comfy') pills += '<button type="button" class="pill pill-auto" data-search="comfy">comfyUI</button>';
+      if (item.sourceFormat === 'a1111') pills += '<button type="button" class="pill pill-auto" data-search="a1111">A1111</button>';
       card.innerHTML =
-        '<div class="card-thumb">' + (thumbUrl ? '<img alt="" src="' + thumbUrl + '">' : remoteThumb ? '<img alt="" data-remote="' + remoteThumb + '">' : '<span class="no-image">画像なし</span>') + '</div>' +
+        '<div class="card-thumb">' + (thumbUrl ? '<img alt="" loading="lazy" decoding="async" src="' + thumbUrl + '">' : remoteThumb ? '<img alt="" loading="lazy" decoding="async" data-remote="' + remoteThumb + '">' : '<span class="no-image">画像なし</span>') + '</div>' +
         '<div class="card-body">' +
           '<div class="card-title-row"><button type="button" class="card-star' + (item.favorite ? ' is-on' : '') + '" data-fav="' + item.id + '" aria-label="お気に入り切替">' + (item.favorite ? STAR_ON : STAR_OFF) + '</button><span class="card-title">' + esc(title) + '</span></div>' +
           (pills ? '<div class="card-tags">' + pills + '</div>' : '') +
           (item.positive ? '<p class="card-prompt">' + esc(item.positive) + '</p>' : '<p class="card-prompt">（プロンプトなし）</p>') +
           '<div class="card-meta"><span>' + fmtDate(item.createdAt) + '</span><span>' + (item.width ? item.width + '×' + item.height : '') + '</span></div>' +
         '</div>';
+      card.tabIndex = 0;
+      card.setAttribute('role', 'button');
+      card.setAttribute('aria-label', title + ' を開く');
+      card.addEventListener('keydown', function (ev) {
+        if (ev.target !== card) return;
+        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); openViewer(item.id); }
+      });
       card.addEventListener('click', function (ev) {
         if (ev.target.closest('[data-fav]')) return;
+        var tagBtn = ev.target.closest('[data-tag]');
+        if (tagBtn) { toggleTag(tagBtn.getAttribute('data-tag')); return; }
+        var searchBtn = ev.target.closest('[data-search]');
+        if (searchBtn) {
+          state.query = searchBtn.getAttribute('data-search');
+          $('searchInput').value = state.query;
+          state.shown = PAGE;
+          render();
+          return;
+        }
         openViewer(item.id);
       });
       grid.appendChild(card);
@@ -1522,6 +1658,14 @@ button { cursor: pointer; }
         render();
       });
     });
+    syncHash();
+    if (state.pendingItemId && state.items.length) {
+      // Keep the pending id while items are not loaded yet (e.g. Drive mode
+      // before sign-in); resolve it on the first render that has items.
+      var pendingId = state.pendingItemId;
+      state.pendingItemId = null;
+      if (state.items.some(function (i) { return i.id === pendingId; })) openDetail(pendingId);
+    }
     chips.querySelectorAll('[data-untag]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var t = btn.getAttribute('data-untag');
@@ -1568,9 +1712,14 @@ button { cursor: pointer; }
     $('favBtn').innerHTML = (item.favorite ? STAR_ON : STAR_OFF) + (item.favorite ? ' お気に入り済み' : ' お気に入り');
   }
   function openDetail(id) {
+    if (state.selectedId && state.selectedId !== id && detailDirty) {
+      if (!window.confirm('未保存の編集があります。破棄して別の画像を開きますか？')) return;
+      detailDirty = false;
+    }
     state.selectedId = id;
     var item = currentItem();
     if (!item) return;
+    detailDirty = false;
     $('detail').hidden = false;
     var wrap = $('detailImageWrap');
     var url = getImageUrl(item, 'full');
@@ -1579,6 +1728,16 @@ button { cursor: pointer; }
     else wrap.innerHTML = '<div class="no-image">画像なし（プロンプトのみの登録）</div>';
     var detailImg = wrap.querySelector('img');
     if (detailImg) detailImg.addEventListener('click', function () { openViewer(item.id); });
+    var dt = $('detailTags');
+    var detailTags = (item.tags || []).concat((item.autoTags || []).filter(function (tg) { return !state.excludeQuality || PW.QUALITY_TAGS.indexOf(tg) === -1; }));
+    dt.hidden = detailTags.length === 0;
+    dt.innerHTML = detailTags.slice(0, 24).map(function (tg) {
+      var active = state.activeTags.indexOf(tg) !== -1 ? ' is-active' : '';
+      return '<button type="button" class="pill' + active + '" data-detail-tag="' + esc(tg) + '" title="このタグで絞り込む">' + esc(tg) + '</button>';
+    }).join('');
+    dt.querySelectorAll('[data-detail-tag]').forEach(function (btn) {
+      btn.addEventListener('click', function () { toggleTag(btn.getAttribute('data-detail-tag')); });
+    });
     $('editTitle').value = item.title || '';
     $('editTags').value = (item.tags || []).join(', ');
     $('editMemo').value = item.memo || '';
@@ -1594,7 +1753,11 @@ button { cursor: pointer; }
     $('downloadWorkflowBtn').disabled = !item.workflowJson;
     render();
   }
-  function closeDetail() {
+  function closeDetail(force) {
+    if (!force && detailDirty) {
+      if (!window.confirm('未保存の編集があります。破棄して閉じますか？')) return;
+    }
+    detailDirty = false;
     state.selectedId = null;
     $('detail').hidden = true;
     render();
@@ -2214,6 +2377,12 @@ button { cursor: pointer; }
       try { localStorage.setItem('pw-tags-collapsed', collapsed ? '1' : '0'); } catch (e) {}
     };
     try { if (localStorage.getItem('pw-tags-collapsed') === '1') setTagsCollapsed(true); } catch (e) {}
+    if (!localStorage.getItem('pw-tags-collapsed') && window.matchMedia && window.matchMedia('(max-width: 900px)').matches) {
+      // Phone-first: keep the gallery reachable without scrolling past 30 tags.
+      // Applied visually only; the stored preference stays untouched.
+      $('popularTags').hidden = true;
+      tagsToggle.setAttribute('aria-expanded', 'false');
+    }
     tagsToggle.addEventListener('click', function () {
       setTagsCollapsed(!$('popularTags').hidden);
     });
@@ -2235,9 +2404,28 @@ button { cursor: pointer; }
         render();
       });
     });
-    $('searchInput').addEventListener('input', function () { state.query = this.value; state.shown = PAGE; render(); });
-    $('sortSelect').addEventListener('change', function () { state.sort = this.value; render(); });
-    $('qualityToggle').addEventListener('change', function () { state.excludeQuality = this.checked; render(); });
+    var searchTimer = null;
+    $('searchInput').addEventListener('input', function () {
+      var value = this.value;
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(function () { state.query = value; state.shown = PAGE; render(); }, 180);
+    });
+    $('sortSelect').addEventListener('change', function () {
+      state.sort = this.value;
+      if (state.sort === 'random') state.shuffleSeed = String(Math.floor(Math.random() * 1e9));
+      state.shown = PAGE;
+      render();
+    });
+    $('thumbFitSelect').addEventListener('change', function () {
+      state.thumbFit = this.value === 'contain' ? 'contain' : 'crop';
+      try { localStorage.setItem('pw-thumb-fit', state.thumbFit); } catch (e) {}
+      render();
+    });
+    $('qualityToggle').addEventListener('change', function () {
+      state.excludeQuality = this.checked;
+      try { localStorage.setItem('pw-exclude-quality', state.excludeQuality ? '1' : '0'); } catch (e) {}
+      render();
+    });
     $('moreBtn').addEventListener('click', function () { state.shown += PAGE; render(); });
 
     var dragDepth = 0;
@@ -2251,7 +2439,7 @@ button { cursor: pointer; }
       if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) importFiles(e.dataTransfer.files);
     });
 
-    $('detailClose').addEventListener('click', closeDetail);
+    $('detailClose').addEventListener('click', function () { closeDetail(); });
     $('favBtn').addEventListener('click', function () {
       var item = currentItem(); if (!item) return;
       item.favorite = !item.favorite; item.updatedAt = Date.now();
@@ -2259,12 +2447,35 @@ button { cursor: pointer; }
     });
     $('deleteBtn').addEventListener('click', function () {
       var item = currentItem(); if (!item) return;
-      if (!window.confirm('このカードを削除しますか？')) return;
-      dbDelete(item.id).then(function () {
+      if (!window.confirm('このカードを削除しますか？（削除直後は「元に戻す」で復元できます）')) return;
+      var snapshot = item;
+      var index = state.items.findIndex(function (i) { return i.id === item.id; });
+      // In Drive mode the cached item holds no image bytes; fetch them first so
+      // an Undo can re-upload the files that the delete is about to remove.
+      var prepare = Promise.resolve();
+      if (appMode === 'drive' && item.fileHash && !item.imageBlob) {
+        var fetchBlob = function (kind) {
+          var fid = driveRemoteFileId(item, kind);
+          if (!fid) return Promise.resolve(null);
+          return driveEnsureToken(false).then(function () { return driveApi('files/' + fid + '?alt=media'); })
+            .then(function (r) { return r.blob(); }).catch(function () { return null; });
+        };
+        prepare = Promise.all([fetchBlob('full'), fetchBlob('thumb')]).then(function (blobs) {
+          if (blobs[0]) snapshot.imageBlob = blobs[0];
+          if (blobs[1]) snapshot.thumbBlob = blobs[1];
+        });
+      }
+      prepare.then(function () { return dbDelete(item.id); }).then(function () {
         releaseItemUrls(item.id);
         state.items = state.items.filter(function (i) { return i.id !== item.id; });
-        closeDetail();
-        toast('削除しました');
+        closeDetail(true);
+        toast('削除しました', { label: '元に戻す', fn: function () {
+          dbPut(snapshot).then(function () {
+            state.items.splice(Math.min(index, state.items.length), 0, snapshot);
+            render();
+            toast('元に戻しました');
+          }).catch(function () { toast('復元に失敗しました'); });
+        } });
       });
     });
     $('copyPositiveBtn').addEventListener('click', function () { copyText($('editPositive').value, 'ポジティブプロンプト'); });
@@ -2292,6 +2503,12 @@ button { cursor: pointer; }
       var item = currentItem(); if (!item || !item.workflowJson) return;
       download((item.fileName || 'workflow').replace(/\.png$/i, '') + '-workflow.json', new Blob([item.workflowJson], { type: 'application/json' }));
     });
+    ['editTitle', 'editTags', 'editMemo', 'editPositive', 'editNegative'].forEach(function (fid) {
+      $(fid).addEventListener('input', function () { if (state.selectedId) detailDirty = true; });
+    });
+    window.addEventListener('beforeunload', function (ev) {
+      if (detailDirty) { ev.preventDefault(); ev.returnValue = ''; }
+    });
     $('saveEditBtn').addEventListener('click', function () {
       var item = currentItem(); if (!item) return;
       item.title = $('editTitle').value.trim();
@@ -2301,7 +2518,7 @@ button { cursor: pointer; }
       item.negative = $('editNegative').value;
       item.autoTags = PW.normalizeAutoTags(item.positive).tags;
       item.updatedAt = Date.now();
-      dbPut(item).then(function () { toast('保存しました'); render(); });
+      dbPut(item).then(function () { detailDirty = false; toast('保存しました'); render(); });
     });
     $('templateBtn').addEventListener('click', function () {
       var item = {
@@ -2325,7 +2542,9 @@ button { cursor: pointer; }
   }
 
   // ---------- init ----------
+  applyHash();
   bind();
+  $('searchInput').value = state.query;
   updateDriveUi();
   var initLoad = appMode === 'drive'
     ? Promise.resolve([]) // drive mode waits for the explicit sign-in click (see setMode note)
