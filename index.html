@@ -92,6 +92,14 @@ button { cursor: pointer; }
 .side-foot { margin-top: auto; display: flex; flex-direction: column; gap: var(--sp-1); }
 .side-action { border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius-control); min-height: 32px; height: auto; padding: 4px var(--sp-2); line-height: 1.35; text-align: center; overflow-wrap: anywhere; }
 .side-action:hover { background: var(--raised); }
+.bulk-bar { display: flex; align-items: center; gap: var(--sp-1); flex-wrap: wrap; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 8px var(--sp-3); margin-top: var(--sp-3); font-size: var(--fs-small); }
+.bulk-bar[hidden] { display: none; }
+.bulk-tag-wrap { display: inline-flex; gap: 4px; align-items: center; }
+.bulk-tag-wrap input, .bulk-tag-wrap select { min-height: 30px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface); color: var(--text); padding: 0 8px; }
+.card { position: relative; }
+.card.is-checked { outline: 2px solid var(--accent); outline-offset: -2px; }
+.bulk-check { position: absolute; top: 8px; left: 8px; z-index: 3; width: 26px; height: 26px; border-radius: 999px; border: 2px solid #fff; background: rgba(20, 16, 18, 0.45); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 15px; box-shadow: 0 1px 5px rgba(0,0,0,0.35); }
+.card.is-checked .bulk-check { background: var(--accent); }
 .set-bar { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; background: var(--accent-soft); border: 1px solid var(--accent-track); color: var(--accent-ink); border-radius: var(--radius-control); padding: 8px var(--sp-3); margin-top: var(--sp-3); font-size: var(--fs-small); }
 .set-bar[hidden] { display: none; }
 .batch-select { width: 100%; min-height: 32px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface); color: var(--text); padding: 0 8px; }
@@ -375,6 +383,18 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
         <option value="crop">サムネイル: トリミング</option>
         <option value="contain">サムネイル: 全体表示</option>
       </select>
+      <button id="bulkModeBtn" class="btn" type="button">一括編集</button>
+    </div>
+    <div id="bulkBar" class="bulk-bar" hidden>
+      <span id="bulkCount">0件選択中</span>
+      <button id="bulkAllBtn" class="btn btn-small" type="button">表示中を全選択</button>
+      <button id="bulkFavBtn" class="btn btn-small" type="button">お気に入りに追加</button>
+      <button id="bulkUnfavBtn" class="btn btn-small" type="button">お気に入り解除</button>
+      <span class="bulk-tag-wrap"><input id="bulkTagInput" type="text" placeholder="追加するタグ"><button id="bulkTagBtn" class="btn btn-small" type="button">タグ追加</button></span>
+      <span class="bulk-tag-wrap"><select id="bulkBatchSelect" aria-label="移動先のセット"></select><button id="bulkBatchBtn" class="btn btn-small" type="button">セットへ移動</button></span>
+      <button id="bulkDeleteBtn" class="btn btn-small btn-danger" type="button">削除</button>
+      <button id="bulkClearBtn" class="btn btn-small" type="button">選択解除</button>
+      <button id="bulkExitBtn" class="btn btn-small" type="button">終了</button>
     </div>
     <div id="activeTags" class="active-tags" hidden></div>
     <div id="setBar" class="set-bar" hidden></div>
@@ -859,6 +879,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
   'use strict';
   var PW = window.PWParser;
   var STAR_ON = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 2.5l2.95 6.35 6.95.82-5.13 4.73 1.38 6.85L12 17.77l-6.15 3.48 1.38-6.85L2.1 9.67l6.95-.82z" fill="currentColor"/></svg>';
+  var CHECK_SVG = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M4.5 12.5l5 5L19.5 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   var STAR_OFF = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 2.5l2.95 6.35 6.95.82-5.13 4.73 1.38 6.85L12 17.77l-6.15 3.48 1.38-6.85L2.1 9.67l6.95-.82z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>';
 
   // ---------- storage (IndexedDB, with in-memory fallback) ----------
@@ -1441,6 +1462,8 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     activeTags: [],
     batch: '',
     chara: '',
+    selectMode: false,
+    selectedIds: new Set(),
     sort: 'new',
     shown: 100,
     selectedId: null,
@@ -1678,7 +1701,15 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
   var batchCache = { sig: '', byItem: null, list: [] };
   function computeBatches() {
     var items = state.items;
-    var sig = items.length + ':' + (items.length ? items[0].createdAt + '/' + items[items.length - 1].createdAt : '');
+    // The signature must see batchId edits (bulk set moves change neither
+    // the count nor the createdAt span), so hash id+batchId+createdAt.
+    var sig = items.length + ':';
+    for (var i = 0; i < items.length; i++) {
+      var s = items[i].id + '|' + (items[i].batchId || '') + '|' + items[i].createdAt;
+      var h = 0;
+      for (var j = 0; j < s.length; j++) h = (Math.imul(h, 31) + s.charCodeAt(j)) | 0;
+      sig += h + ',';
+    }
     if (batchCache.sig === sig) return batchCache;
     var byItem = new Map();
     var groups = new Map();
@@ -1723,6 +1754,98 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     }
     if (state.batch && !bc.list.some(function (g) { return g.id === state.batch; })) state.batch = '';
     if (sel.value !== state.batch) sel.value = state.batch;
+  }
+
+  // ---------- bulk edit ----------
+  function selectedItems() {
+    return state.items.filter(function (i) { return state.selectedIds.has(i.id); });
+  }
+  function renderBulkBar() {
+    var bar = $('bulkBar');
+    if (!bar) return;
+    bar.hidden = !state.selectMode;
+    if (!state.selectMode) return;
+    $('bulkCount').textContent = state.selectedIds.size + '件選択中';
+    var sel = $('bulkBatchSelect');
+    var bc = computeBatches();
+    sel.innerHTML = '<option value="__new__">新規セット（いま）</option>' + bc.list.map(function (g) {
+      return '<option value="' + esc(g.id) + '">' + esc(batchLabel(g)) + '</option>';
+    }).join('');
+  }
+  function bulkApply(mutator, msg) {
+    var targets = selectedItems();
+    if (!targets.length) { toast('カードが選択されていません'); return; }
+    drive.batchDepth++;
+    var chain = Promise.resolve();
+    targets.forEach(function (item) {
+      chain = chain.then(function () { mutator(item); item.updatedAt = Date.now(); return dbPut(item); });
+    });
+    chain.then(function () {
+      drive.batchDepth--;
+      if (appMode === 'drive' && drive.batchDepth === 0) return driveFlushIndex().catch(function () {});
+    }).then(function () { render(); toast(msg); });
+  }
+  function bulkDelete() {
+    var targets = selectedItems();
+    if (!targets.length) { toast('カードが選択されていません'); return; }
+    if (!window.confirm(targets.length + ' 件を削除しますか？（削除直後は「元に戻す」で復元できます）')) return;
+    var snapshots = targets.map(function (item) {
+      return { item: item, index: state.items.findIndex(function (i) { return i.id === item.id; }) };
+    }).sort(function (a, b) { return a.index - b.index; });
+    var prepare = Promise.resolve();
+    if (appMode === 'drive') {
+      var fetchBlob = function (item, kind) {
+        var fid = driveRemoteFileId(item, kind);
+        if (!fid) return Promise.resolve(null);
+        return driveEnsureToken(false).then(function () { return driveApi('files/' + fid + '?alt=media'); })
+          .then(function (r) { return r.blob(); }).catch(function () { return null; });
+      };
+      snapshots.forEach(function (s) {
+        if (s.item.fileHash && !s.item.imageBlob) {
+          prepare = prepare.then(function () {
+            return Promise.all([fetchBlob(s.item, 'full'), fetchBlob(s.item, 'thumb')]).then(function (blobs) {
+              if (blobs[0]) s.item.imageBlob = blobs[0];
+              if (blobs[1]) s.item.thumbBlob = blobs[1];
+            });
+          });
+        }
+      });
+    }
+    drive.batchDepth++;
+    prepare.then(function () {
+      var chain = Promise.resolve();
+      snapshots.forEach(function (s) { chain = chain.then(function () { return dbDelete(s.item.id); }); });
+      return chain;
+    }).then(function () {
+      drive.batchDepth--;
+      if (appMode === 'drive' && drive.batchDepth === 0) return driveFlushIndex().catch(function () {});
+    }).then(function () {
+      var ids = new Set(snapshots.map(function (s) { return s.item.id; }));
+      snapshots.forEach(function (s) { releaseItemUrls(s.item.id); });
+      state.items = state.items.filter(function (i) { return !ids.has(i.id); });
+      state.selectedIds.clear();
+      render();
+      toast(snapshots.length + ' 件を削除しました', { label: '元に戻す', fn: function () {
+        drive.batchDepth++;
+        var chain = Promise.resolve();
+        snapshots.forEach(function (s) { chain = chain.then(function () { return dbPut(s.item); }); });
+        chain.then(function () {
+          drive.batchDepth--;
+          if (appMode === 'drive' && drive.batchDepth === 0) return driveFlushIndex().catch(function () {});
+        }).then(function () {
+          snapshots.forEach(function (s) { state.items.splice(Math.min(s.index, state.items.length), 0, s.item); });
+          render();
+          toast('元に戻しました');
+        }).catch(function () { toast('復元に失敗しました'); });
+      } });
+    });
+  }
+  function setSelectMode(on) {
+    state.selectMode = on;
+    if (!on) state.selectedIds.clear();
+    $('bulkModeBtn').textContent = on ? '一括編集中' : '一括編集';
+    $('bulkModeBtn').classList.toggle('btn-primary', on);
+    render();
   }
 
   // ---------- filtering / rendering ----------
@@ -1819,6 +1942,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     document.querySelectorAll('.nav-row').forEach(function (b) { b.classList.toggle('is-active', b.getAttribute('data-filter') === state.filter); });
     renderBatchOptions();
     renderCharaOptions();
+    renderBulkBar();
     (function () {
       var bar = $('setBar');
       if (!bar) return;
@@ -1839,7 +1963,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     grid.innerHTML = '';
     list.slice(0, state.shown).forEach(function (item) {
       var card = document.createElement('article');
-      card.className = 'card' + (item.id === state.selectedId ? ' is-selected' : '');
+      card.className = 'card' + (item.id === state.selectedId ? ' is-selected' : '') + (state.selectMode && state.selectedIds.has(item.id) ? ' is-checked' : '');
       var thumbUrl = getImageUrl(item, 'thumb');
       var remoteThumb = (!thumbUrl && appMode === 'drive' && item.fileHash) ? item.id + '|thumb' : null;
       var title = item.title || item.fileName || '（タイトルなし）';
@@ -1851,6 +1975,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       if (item.sourceFormat === 'comfy') pills += '<button type="button" class="pill pill-auto" data-search="comfy">comfyUI</button>';
       if (item.sourceFormat === 'a1111') pills += '<button type="button" class="pill pill-auto" data-search="a1111">A1111</button>';
       card.innerHTML =
+        (state.selectMode ? '<span class="bulk-check" aria-hidden="true">' + (state.selectedIds.has(item.id) ? CHECK_SVG : '') + '</span>' : '') +
         '<div class="card-thumb">' + (thumbUrl ? '<img alt="" loading="lazy" decoding="async" src="' + thumbUrl + '">' : remoteThumb ? '<img alt="" loading="lazy" decoding="async" data-remote="' + remoteThumb + '">' : '<span class="no-image">画像なし</span>') + '</div>' +
         '<div class="card-body">' +
           '<div class="card-title-row"><button type="button" class="card-star' + (item.favorite ? ' is-on' : '') + '" data-fav="' + item.id + '" aria-label="お気に入り切替">' + (item.favorite ? STAR_ON : STAR_OFF) + '</button><span class="card-title">' + esc(title) + '</span></div>' +
@@ -1866,6 +1991,15 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
         if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); openViewer(item.id); }
       });
       card.addEventListener('click', function (ev) {
+        if (state.selectMode) {
+          if (state.selectedIds.has(item.id)) state.selectedIds.delete(item.id); else state.selectedIds.add(item.id);
+          var on = state.selectedIds.has(item.id);
+          card.classList.toggle('is-checked', on);
+          var chk = card.querySelector('.bulk-check');
+          if (chk) chk.innerHTML = on ? CHECK_SVG : '';
+          renderBulkBar();
+          return;
+        }
         if (ev.target.closest('[data-fav]')) return;
         var tagBtn = ev.target.closest('[data-tag]');
         if (tagBtn) { toggleTag(tagBtn.getAttribute('data-tag')); return; }
@@ -2697,6 +2831,38 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       clearTimeout(searchTimer);
       searchTimer = setTimeout(function () { state.query = value; state.shown = PAGE; render(); }, 180);
     });
+    $('bulkModeBtn').addEventListener('click', function () { setSelectMode(!state.selectMode); });
+    $('bulkExitBtn').addEventListener('click', function () { setSelectMode(false); });
+    $('bulkClearBtn').addEventListener('click', function () { state.selectedIds.clear(); render(); });
+    $('bulkAllBtn').addEventListener('click', function () {
+      filteredItems().slice(0, state.shown).forEach(function (i) { state.selectedIds.add(i.id); });
+      render();
+    });
+    $('bulkFavBtn').addEventListener('click', function () {
+      bulkApply(function (i) { i.favorite = true; }, 'お気に入りに追加しました');
+    });
+    $('bulkUnfavBtn').addEventListener('click', function () {
+      bulkApply(function (i) { i.favorite = false; }, 'お気に入りを解除しました');
+    });
+    $('bulkTagBtn').addEventListener('click', function () {
+      var tag = $('bulkTagInput').value.trim();
+      if (!tag) { toast('タグを入力してください'); return; }
+      bulkApply(function (i) {
+        i.tags = i.tags || [];
+        if (i.tags.indexOf(tag) === -1) i.tags.push(tag);
+      }, 'タグ「' + tag + '」を追加しました');
+      $('bulkTagInput').value = '';
+    });
+    $('bulkBatchBtn').addEventListener('click', function () {
+      var target = $('bulkBatchSelect').value;
+      if (target === '__new__') {
+        var newId = 'b' + Date.now().toString(36);
+        bulkApply(function (i) { i.batchId = newId; }, '新規セットへ移動しました');
+      } else {
+        bulkApply(function (i) { i.batchId = target; }, 'セットへ移動しました');
+      }
+    });
+    $('bulkDeleteBtn').addEventListener('click', function () { bulkDelete(); });
     $('batchSelect').addEventListener('change', function () {
       state.batch = this.value;
       state.shown = PAGE;
