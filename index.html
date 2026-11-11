@@ -91,6 +91,9 @@ button { cursor: pointer; }
 .side-foot { margin-top: auto; display: flex; flex-direction: column; gap: var(--sp-1); }
 .side-action { border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius-control); min-height: 32px; height: auto; padding: 4px var(--sp-2); line-height: 1.35; text-align: center; overflow-wrap: anywhere; }
 .side-action:hover { background: var(--raised); }
+.set-bar { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; background: var(--accent-soft); border: 1px solid var(--accent-track); color: var(--accent-ink); border-radius: var(--radius-control); padding: 8px var(--sp-3); margin-top: var(--sp-3); font-size: var(--fs-small); }
+.set-bar[hidden] { display: none; }
+.batch-select { width: 100%; min-height: 32px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface); color: var(--text); padding: 0 8px; }
 .side-note { color: var(--muted); font-size: var(--fs-small); margin: var(--sp-1) 0 0; }
 
 /* Canvas */
@@ -132,7 +135,7 @@ button { cursor: pointer; }
 .card-star.is-on { color: var(--accent); }
 .card-title { font-weight: 600; overflow-wrap: anywhere; }
 .card-tags { display: flex; flex-wrap: wrap; gap: 4px; }
-.pill { background: var(--raised); border: 0; border-radius: 999px; padding: var(--sp-0) 8px; font-size: var(--fs-small); color: var(--text); }
+.pill { background: var(--raised); border: 0; border-radius: 999px; padding: var(--sp-0) 8px; font-size: var(--fs-small); color: var(--text); overflow-wrap: anywhere; }
 button.pill { cursor: pointer; font: inherit; }
 button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
 .card:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
@@ -220,7 +223,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
 .viewer-ticks { display: flex; align-items: center; gap: 4px; height: 18px; max-width: 92vw; overflow: hidden; }
 .viewer-tick { width: 2px; height: 14px; border-radius: 1px; background: rgba(245, 238, 241, 0.38); transform-origin: center; flex: none; }
 .viewer-tick.is-near { background: var(--accent, #d94f7e); }
-.viewer-prompt { margin: 0; max-width: 760px; font-size: 12.5px; line-height: 1.55; color: rgba(245, 238, 241, 0.75); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-align: center; min-height: 1.55em; }
+.viewer-prompt { overflow-wrap: anywhere; margin: 0; max-width: 760px; font-size: 12.5px; line-height: 1.55; color: rgba(245, 238, 241, 0.75); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-align: center; min-height: 1.55em; }
 .viewer-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
 .viewer-btn { height: 36px; padding: 0 16px; border-radius: 999px; border: 1px solid rgba(245, 238, 241, 0.3); background: transparent; color: inherit; font-size: 13px; cursor: pointer; }
 .viewer-btn:disabled { opacity: 0.35; cursor: default; }
@@ -257,6 +260,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
   .filter-row { flex-wrap: wrap; gap: 8px; margin-top: 16px; }
   #searchInput { flex: 1 1 100%; height: 42px; font-size: 16px; }
   #sortSelect, #thumbFitSelect { flex: 1 1 0; height: 38px; font-size: 16px; }
+  .batch-select { font-size: 16px; min-height: 38px; }
   .grid { gap: var(--sp-2); margin-top: var(--sp-3); }
   .card-body { padding: 8px var(--sp-2) 12px; gap: 4px; }
   .card-title { font-size: 13px; }
@@ -291,6 +295,12 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       <button class="nav-row" data-filter="comfy" type="button"><span>ComfyUI</span><span class="nav-count" id="countComfy">0</span></button>
       <button class="nav-row" data-filter="a1111" type="button"><span>A1111</span><span class="nav-count" id="countA1111">0</span></button>
     </nav>
+
+    <div class="side-section">
+      <h2>セット（取り込み単位）</h2>
+      <select id="batchSelect" class="batch-select" aria-label="セットで絞り込み"></select>
+      <p class="side-note">並び替えを「ランダム」にすると、セット内シャッフル再生になります。</p>
+    </div>
 
     <div class="side-section">
       <div class="side-section-head">
@@ -360,7 +370,8 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       </select>
     </div>
     <div id="activeTags" class="active-tags" hidden></div>
-    <div id="importProgress" class="import-progress" hidden>
+    <div id="setBar" class="set-bar" hidden></div>
+      <div id="importProgress" class="import-progress" hidden>
       <div class="import-progress-bar"><span id="importProgressFill"></span></div>
       <p id="importProgressText"></p>
     </div>
@@ -1421,6 +1432,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     filter: 'all',
     query: '',
     activeTags: [],
+    batch: '',
     sort: 'new',
     shown: 100,
     selectedId: null,
@@ -1442,6 +1454,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     if (state.query) params.set('q', state.query);
     if (state.filter !== 'all') params.set('f', state.filter);
     if (state.activeTags.length) params.set('tags', state.activeTags.join(','));
+    if (state.batch) params.set('set', state.batch);
     if (state.sort !== 'new') params.set('sort', state.sort);
     if (state.thumbFit !== 'crop') params.set('fit', state.thumbFit);
     if (state.selectedId) params.set('item', state.selectedId);
@@ -1457,6 +1470,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     var f = params.get('f');
     if (['all', 'favorite', 'imageonly', 'comfy', 'a1111'].indexOf(f) !== -1) state.filter = f;
     if (params.get('tags')) state.activeTags = params.get('tags').split(',').filter(Boolean);
+    if (params.get('set')) state.batch = params.get('set');
     var s = params.get('sort');
     if (['new', 'old', 'title', 'fav', 'random'].indexOf(s) !== -1) state.sort = s;
     var fit = params.get('fit');
@@ -1507,7 +1521,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     return item;
   }
 
-  function processFile(file) {
+  function processFile(file, batchId) {
     return file.arrayBuffer().then(function (buffer) {
       return hashFile(buffer).then(function (hash) {
         return dbFindByHash(hash).then(function (existing) {
@@ -1518,7 +1532,8 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
             tags: [], memo: '', favorite: false,
             imageBlob: file, thumbBlob: null,
             width: null, height: null, latentWidth: null, latentHeight: null,
-            createdAt: Date.now(), updatedAt: Date.now()
+            createdAt: Date.now(), updatedAt: Date.now(),
+            batchId: batchId || ''
           };
           var parsePromise;
           if (PW.isPng(buffer)) {
@@ -1554,6 +1569,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       return /^image\/(png|jpeg|webp)$/.test(f.type) || /\.(png|jpe?g|webp)$/i.test(f.name);
     });
     if (!files.length) { toast('対応する画像ファイルがありませんでした'); return; }
+    var importBatchId = 'b' + Date.now().toString(36);
     var progress = $('importProgress'), fill = $('importProgressFill'), text = $('importProgressText');
     progress.hidden = false;
     drive.batchDepth++;
@@ -1563,7 +1579,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     files.forEach(function (file) {
       chain = chain.then(function () {
         text.textContent = '取り込み中 ' + (done + 1) + ' / ' + files.length + ' 件: ' + file.name;
-        return processFile(file).then(function (res) {
+        return processFile(file, importBatchId).then(function (res) {
           done++;
           if (res.status === 'added') { added++; if (res.item) state.items.unshift(res.item); }
           else if (res.status === 'duplicate') dup++;
@@ -1586,6 +1602,61 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     });
   }
 
+  // ---------- sets (import batches) ----------
+  // New imports carry an explicit batchId. Items without one (everything
+  // registered before sets existed) are grouped by registration time:
+  // a gap of more than 30 minutes starts a new set. The grouping is
+  // derived, never written back, so the Drive index stays untouched.
+  var batchCache = { sig: '', byItem: null, list: [] };
+  function computeBatches() {
+    var items = state.items;
+    var sig = items.length + ':' + (items.length ? items[0].createdAt + '/' + items[items.length - 1].createdAt : '');
+    if (batchCache.sig === sig) return batchCache;
+    var byItem = new Map();
+    var groups = new Map();
+    var sorted = items.slice().sort(function (a, b) { return a.createdAt - b.createdAt; });
+    var cur = null;
+    sorted.forEach(function (item) {
+      var id = item.batchId || '';
+      if (!id) {
+        if (!cur || item.createdAt - cur.last > 30 * 60000) cur = { start: item.createdAt, last: item.createdAt };
+        cur.last = item.createdAt;
+        id = 'auto-' + cur.start;
+      }
+      byItem.set(item.id, id);
+      var g = groups.get(id);
+      if (!g) { g = { id: id, ts: item.createdAt, count: 0 }; groups.set(id, g); }
+      g.count++;
+      if (item.createdAt < g.ts) g.ts = item.createdAt;
+    });
+    var list = Array.from(groups.values()).sort(function (a, b) { return b.ts - a.ts; });
+    batchCache = { sig: sig, byItem: byItem, list: list };
+    return batchCache;
+  }
+  function batchIdOf(item) {
+    return computeBatches().byItem.get(item.id) || '';
+  }
+  function batchLabel(g) {
+    var d = new Date(g.ts);
+    var hh = ('0' + d.getHours()).slice(-2), mm = ('0' + d.getMinutes()).slice(-2);
+    return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + hh + ':' + mm + '（' + g.count + '件）';
+  }
+  var batchOptionsSig = null;
+  function renderBatchOptions() {
+    var bc = computeBatches();
+    var sig = bc.list.map(function (g) { return g.id + ':' + g.count; }).join('|');
+    var sel = $('batchSelect');
+    if (!sel) return;
+    if (sig !== batchOptionsSig) {
+      batchOptionsSig = sig;
+      sel.innerHTML = '<option value="">すべてのセット</option>' + bc.list.map(function (g) {
+        return '<option value="' + esc(g.id) + '">' + esc(batchLabel(g)) + '</option>';
+      }).join('');
+    }
+    if (state.batch && !bc.list.some(function (g) { return g.id === state.batch; })) state.batch = '';
+    if (sel.value !== state.batch) sel.value = state.batch;
+  }
+
   // ---------- filtering / rendering ----------
   function shuffleKey(item) {
     // Deterministic per-session shuffle: stable across re-renders and paging,
@@ -1602,6 +1673,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       if (state.filter === 'imageonly' && item.sourceFormat !== 'none') return false;
       if (state.filter === 'comfy' && item.sourceFormat !== 'comfy') return false;
       if (state.filter === 'a1111' && item.sourceFormat !== 'a1111') return false;
+      if (state.batch && batchIdOf(item) !== state.batch) return false;
       for (var i = 0; i < state.activeTags.length; i++) {
         var t = state.activeTags[i];
         if ((item.autoTags || []).indexOf(t) === -1 && (item.tags || []).indexOf(t) === -1) return false;
@@ -1676,6 +1748,21 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     $('thumbFitSelect').value = state.thumbFit;
     $('qualityToggle').checked = state.excludeQuality;
     document.querySelectorAll('.nav-row').forEach(function (b) { b.classList.toggle('is-active', b.getAttribute('data-filter') === state.filter); });
+    renderBatchOptions();
+    (function () {
+      var bar = $('setBar');
+      if (!bar) return;
+      if (!state.batch) { bar.hidden = true; bar.innerHTML = ''; return; }
+      var g = computeBatches().list.find(function (x) { return x.id === state.batch; });
+      if (!g) { bar.hidden = true; return; }
+      bar.hidden = false;
+      bar.innerHTML = '<span>' + esc(batchLabel(g)) + ' のセットを表示中</span>' +
+        '<button type="button" class="btn btn-small" id="setCarouselBtn">カルーセルで見る</button>';
+      $('setCarouselBtn').addEventListener('click', function () {
+        var list = filteredItems();
+        if (list.length) openViewer(list[0].id);
+      });
+    })();
 
     var grid = $('grid');
     grid.className = 'grid' + (state.thumbFit === 'contain' ? ' fit-contain' : '');
@@ -1771,6 +1858,11 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     function add(k, v) { if (v !== null && v !== undefined && v !== '') rows.push([k, v]); }
     add('ファイル名', item.fileName);
     add('形式', item.sourceFormat === 'comfy' ? 'ComfyUI' : item.sourceFormat === 'a1111' ? 'A1111' : item.sourceFormat === 'template' ? 'テンプレート' : 'メタ情報なし');
+    (function () {
+      var bc = computeBatches();
+      var g = bc.list.find(function (x) { return x.id === batchIdOf(item); });
+      if (g) add('セット', batchLabel(g));
+    })();
     add('モデル', item.model);
     (item.loras || []).forEach(function (l, i) {
       add('LoRA' + (item.loras.length > 1 ? ' ' + (i + 1) : ''), l.name + (l.strengthModel != null ? '（強度 ' + l.strengthModel + (l.strengthClip != null ? ' / clip ' + l.strengthClip : '') + '）' : ''));
@@ -2362,7 +2454,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
             skipped++;
             return;
           }
-          var item = Object.assign({ imageBlob: null, thumbBlob: null, tags: [], autoTags: [], loras: [], favorite: false }, raw);
+          var item = Object.assign({ imageBlob: null, thumbBlob: null, tags: [], autoTags: [], loras: [], favorite: false, batchId: 'b' + Date.now().toString(36) }, raw);
           item.imageBlob = imageBlob;
           var thumbStep = imageBlob ? makeThumbnail(imageBlob).then(function (t) { item.thumbBlob = t; }) : Promise.resolve();
           return thumbStep.then(function () {
@@ -2519,6 +2611,12 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       var value = this.value;
       clearTimeout(searchTimer);
       searchTimer = setTimeout(function () { state.query = value; state.shown = PAGE; render(); }, 180);
+    });
+    $('batchSelect').addEventListener('change', function () {
+      state.batch = this.value;
+      state.shown = PAGE;
+      syncHash();
+      render();
     });
     $('sortSelect').addEventListener('change', function () {
       state.sort = this.value;
