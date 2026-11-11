@@ -92,6 +92,19 @@ button { cursor: pointer; }
 .side-foot { margin-top: auto; display: flex; flex-direction: column; gap: var(--sp-1); }
 .side-action { border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius-control); min-height: 32px; height: auto; padding: 4px var(--sp-2); line-height: 1.35; text-align: center; overflow-wrap: anywhere; }
 .side-action:hover { background: var(--raised); }
+.compare-panel { width: min(880px, 100%); }
+.compare-cols { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3); }
+.compare-item img { width: 100%; border-radius: var(--radius-control); display: block; }
+.compare-item h3 { font-size: var(--fs-small); margin: var(--sp-1) 0; overflow-wrap: anywhere; }
+.compare-table { width: 100%; border-collapse: collapse; font-size: var(--fs-small); margin-top: var(--sp-3); }
+.compare-table th, .compare-table td { border-top: 1px solid var(--rule); padding: 4px var(--sp-1); text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.compare-table tr.is-diff { background: var(--accent-soft); }
+.diff-tokens { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 var(--sp-2); }
+.diff-token { border-radius: 999px; padding: var(--sp-0) 8px; font-size: var(--fs-small); overflow-wrap: anywhere; }
+.diff-token.only-a { background: var(--accent-soft); color: var(--accent-ink); }
+.diff-token.only-b { background: var(--raised); color: var(--text); border: 1px dashed var(--control); }
+.diff-token.both { background: transparent; color: var(--muted); }
+@media (max-width: 760px) { .compare-cols { grid-template-columns: 1fr; } }
 .tag-browser { position: fixed; inset: 0; z-index: 320; background: rgba(24, 18, 20, 0.5); display: flex; align-items: flex-start; justify-content: center; padding: 4vh 12px; }
 .tag-browser[hidden] { display: none; }
 .tag-browser-panel { background: var(--surface); color: var(--text); border-radius: var(--radius-card); width: min(760px, 100%); max-height: 88vh; display: flex; flex-direction: column; overflow: hidden; }
@@ -186,6 +199,17 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
 .field { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-small); color: var(--muted); }
 .field input, .field textarea, .prompt-block textarea { border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface); padding: 8px; color: var(--text); width: 100%; resize: vertical; }
 .prompt-block { display: flex; flex-direction: column; gap: 4px; }
+.block-group { margin-bottom: var(--sp-2); }
+.block-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.block-head h4 { font-size: var(--fs-small); color: var(--muted); margin: 0; font-weight: 600; }
+.block-tokens { display: flex; flex-wrap: wrap; gap: 4px; }
+.block-token { background: var(--raised); border: 0; border-radius: 999px; padding: var(--sp-0) 8px; font-size: var(--fs-small); color: var(--text); overflow-wrap: anywhere; cursor: pointer; font: inherit; }
+.block-token:hover { background: var(--accent-track); color: var(--accent-ink); }
+.similar-strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: var(--sp-1); }
+.similar-card { border: 0; background: transparent; padding: 0; cursor: pointer; text-align: left; }
+.similar-card img, .similar-card .no-image { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: var(--radius-control); display: block; }
+.similar-card span { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; overflow-wrap: anywhere; }
+.similar-empty { color: var(--muted); font-size: var(--fs-small); margin: 0; }
 .prompt-head { display: flex; justify-content: space-between; align-items: center; }
 .prompt-head h3, .detail-sub { font-size: 13px; font-weight: 600; margin: 0; }
 .gen-info { display: grid; grid-template-columns: 96px 1fr; row-gap: 4px; margin: 0; font-size: var(--fs-small); }
@@ -358,6 +382,15 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       </div>
     </div>
 
+    <div class="side-section">
+      <h2>MuseCon連携（再生成）</h2>
+      <label class="field"><span>接続先URL</span><input id="museconUrl" type="text" placeholder="https://（PCのTailscale名）:8191"></label>
+      <label class="field"><span>APIキー</span><input id="museconKey" type="password" autocomplete="off" placeholder="PCの api_key.txt の内容"></label>
+      <button id="museconSaveBtn" class="side-action" type="button">連携設定を保存</button>
+      <button id="museconTestBtn" class="side-action" type="button">接続テスト</button>
+      <p id="museconStatus" class="side-note">キーはこの端末のブラウザ内にのみ保存されます（Drive・書き出しには含まれません）。</p>
+    </div>
+
     <div class="side-foot">
       <button id="exportBtn" class="side-action" type="button">軽量エクスポート</button>
       <button id="fullExportBtn" class="side-action" type="button">フルバックアップ</button>
@@ -404,6 +437,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       <button id="bulkUnfavBtn" class="btn btn-small" type="button">お気に入り解除</button>
       <span class="bulk-tag-wrap"><input id="bulkTagInput" type="text" placeholder="追加するタグ"><button id="bulkTagBtn" class="btn btn-small" type="button">タグ追加</button></span>
       <span class="bulk-tag-wrap"><select id="bulkBatchSelect" aria-label="移動先のセット"></select><button id="bulkBatchBtn" class="btn btn-small" type="button">セットへ移動</button></span>
+      <button id="bulkCompareBtn" class="btn btn-small" type="button">2件を比較</button>
       <button id="bulkDeleteBtn" class="btn btn-small btn-danger" type="button">削除</button>
       <button id="bulkClearBtn" class="btn btn-small" type="button">選択解除</button>
       <button id="bulkExitBtn" class="btn btn-small" type="button">終了</button>
@@ -451,6 +485,9 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
         <button id="downloadWorkflowBtn" class="btn" type="button">workflow.json</button>
         <button id="favBtn" class="btn" type="button"><svg class="star-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M12 2.5l2.95 6.35 6.95.82-5.13 4.73 1.38 6.85L12 17.77l-6.15 3.48 1.38-6.85L2.1 9.67l6.95-.82z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg> お気に入り</button>
         <button id="deleteBtn" class="btn btn-danger" type="button">削除</button>
+        <button id="regenSameBtn" class="btn" type="button">再生成（同じ条件）</button>
+        <button id="regenVarBtn" class="btn" type="button">バリエーション（別seed）</button>
+        <button id="copyRequestBtn" class="btn" type="button">再生成リクエストをコピー</button>
       </div>
 
       <div id="detailTags" class="card-tags" hidden></div>
@@ -461,6 +498,10 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       <div class="prompt-block">
         <div class="prompt-head"><h3>ポジティブプロンプト</h3><button class="btn btn-small" id="copyPositiveBtn" type="button">コピー</button></div>
         <textarea id="editPositive" rows="6"></textarea>
+      </div>
+      <div class="prompt-block">
+        <div class="prompt-head"><h3>ブロック分解（自動分類）</h3></div>
+        <div id="promptBlocks"></div>
       </div>
       <div class="prompt-block">
         <div class="prompt-head"><h3>ネガティブプロンプト</h3><button class="btn btn-small" id="copyNegativeBtn" type="button">コピー</button></div>
@@ -476,9 +517,21 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
         <h3 class="detail-sub">未接続のノード（この生成では未使用）</h3>
         <ul id="unconnectedList" class="unconnected-list"></ul>
       </div>
+      <h3 class="detail-sub">似たプロンプト</h3>
+      <div id="similarStrip" class="similar-strip"></div>
       <button id="saveEditBtn" class="btn btn-primary save-btn" type="button">編集を保存</button>
     </div>
   </aside>
+</div>
+
+<div id="compareView" class="tag-browser" hidden>
+  <div class="tag-browser-panel compare-panel" role="dialog" aria-label="2件の比較">
+    <div class="tag-browser-head">
+      <h2>2件の比較</h2>
+      <button id="compareClose" class="btn btn-small" type="button">閉じる</button>
+    </div>
+    <div id="compareBody" class="tag-browser-body"></div>
+  </div>
 </div>
 
 <div id="viewer" class="viewer" hidden role="dialog" aria-modal="true" aria-label="ビューア">
@@ -1779,6 +1832,193 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     if (sel.value !== state.batch) sel.value = state.batch;
   }
 
+  // ---------- MuseCon regeneration ----------
+  var MUSECON_DEFAULT_URL = ''; // no baked-in endpoint: this page ships in a public repo
+  function museconConfig() {
+    return {
+      url: (storedPref('pw-musecon-url', '') || MUSECON_DEFAULT_URL).replace(/\/+$/, ''),
+      key: storedPref('pw-musecon-key', '')
+    };
+  }
+  function clampDim(v) { return Math.max(512, Math.min(1536, Math.round(v / 8) * 8)); }
+  function museconPayload(item, vary) {
+    var payload = { prompt: item.positive || '' };
+    if (item.negative) payload.negative_prompt = item.negative;
+    var seed = vary ? Math.floor(Math.random() * 4294967295) : item.seed;
+    if (seed != null && seed !== '' && isFinite(Number(seed))) payload.seed = Number(seed);
+    var w = item.latentWidth || item.width, h = item.latentHeight || item.height;
+    if (w && h) { payload.width = clampDim(w); payload.height = clampDim(h); }
+    payload.request_id = 'pw-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
+    return payload;
+  }
+  function museconErrorToast(err) {
+    if (err && err.status === 502) toast('MuseConが起動していません（PC側で start_all.bat を実行してください）');
+    else if (err && (err.status === 401 || err.status === 403)) toast('APIキーが違うようです');
+    else toast('MuseConに届きませんでした（接続・CORS・PCの状態を確認してください）');
+  }
+  function museconGenerate(item, vary) {
+    var cfg = museconConfig();
+    if (!cfg.key) { toast('先にサイドバーの「MuseCon連携」でAPIキーを設定してください'); return; }
+    if (!item.positive) { toast('プロンプトがないので再生成できません'); return; }
+    var payload = museconPayload(item, vary);
+    toast('MuseConで生成中です（数十秒かかります）');
+    var ctrl = new AbortController();
+    var timer = setTimeout(function () { ctrl.abort(); }, 700000);
+    fetch(cfg.url + '/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + cfg.key },
+      body: JSON.stringify(payload),
+      signal: ctrl.signal
+    }).then(function (r) {
+      if (!r.ok) { var e = new Error('http'); e.status = r.status; throw e; }
+      return r.json();
+    }).then(function (body) {
+      clearTimeout(timer);
+      if (!body || !body.image_base64) { toast('生成結果に画像が含まれていませんでした'); return; }
+      var bin = atob(body.image_base64);
+      var bytes = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      var file = new File([bytes], 'musecon_' + (body.filename || (payload.request_id + '.png')), { type: 'image/png' });
+      importFiles([file]);
+    }).catch(function (err) {
+      clearTimeout(timer);
+      museconErrorToast(err);
+    });
+  }
+  function museconTest() {
+    var cfg = museconConfig();
+    var status = $('museconStatus');
+    if (!cfg.key) { status.textContent = 'APIキーが未設定です'; return; }
+    status.textContent = '接続テスト中...';
+    fetch(cfg.url + '/health', { headers: { 'Authorization': 'Bearer ' + cfg.key } }).then(function (r) {
+      if (!r.ok) { var e = new Error('http'); e.status = r.status; throw e; }
+      return r.json();
+    }).then(function (body) {
+      status.textContent = body && body.status === 'ok'
+        ? (body.comfy_reachable ? '接続OK（ComfyUIにも到達できます）' : 'MuseConには接続できましたが、ComfyUIが起動していません')
+        : '応答が想定と違いました';
+    }).catch(function (err) {
+      status.textContent = err && err.status === 502 ? 'MuseConが起動していません（PC側で start_all.bat）'
+        : (err && (err.status === 401 || err.status === 403)) ? 'APIキーが違うようです'
+        : '届きませんでした（URL・ネットワーク・CORSを確認）';
+    });
+  }
+
+  // ---------- prompt block decomposition ----------
+  // Display-only classification of the positive prompt into reusable
+  // blocks. Character tokens are matched against the detected
+  // characters' name tokens; the rest reuse the tag-browser categories.
+  // The stored prompt and the parsers are not touched.
+  var BLOCK_ORDER = ['キャラ', '人数・主体', '髪', '目', '衣装', '表情・ポーズ', '場所・背景', '品質', 'LoRA', 'その他'];
+  var detailBlocks = [];
+  function promptBlocks(item) {
+    var tokens = (item.positive || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+    var charaIds = charaOf(item);
+    var byName = {};
+    var order = [];
+    function push(name, tok) {
+      if (!byName[name]) { byName[name] = { name: name, tokens: [] }; order.push(byName[name]); }
+      byName[name].tokens.push(tok);
+    }
+    tokens.forEach(function (tok) {
+      var low = tok.toLowerCase();
+      if (low.indexOf('<lora:') === 0) { push('LoRA', tok); return; }
+      var isChara = CHARACTERS.some(function (c) {
+        return charaIds.indexOf(c.id) !== -1 && c.names.some(function (n) { return low.indexOf(n) !== -1; });
+      });
+      if (isChara) { push('キャラ', tok); return; }
+      push(tagCategory(tok), tok);
+    });
+    order.sort(function (a, b) { return BLOCK_ORDER.indexOf(a.name) - BLOCK_ORDER.indexOf(b.name); });
+    return order;
+  }
+  function renderPromptBlocks(item) {
+    detailBlocks = promptBlocks(item);
+    var wrap = $('promptBlocks');
+    if (!detailBlocks.length) { wrap.innerHTML = '<p class="side-note">（プロンプトなし）</p>'; return; }
+    wrap.innerHTML = detailBlocks.map(function (g, gi) {
+      return '<div class="block-group"><div class="block-head"><h4>' + esc(g.name) + '</h4>' +
+        '<button class="btn btn-small" type="button" data-block-copy="' + gi + '">コピー</button></div>' +
+        '<div class="block-tokens">' + g.tokens.map(function (t) {
+          return '<button type="button" class="block-token" data-block-token="' + esc(t) + '" title="このトークンで検索">' + esc(t) + '</button>';
+        }).join('') + '</div></div>';
+    }).join('');
+  }
+
+  // ---------- similar prompts ----------
+  // Jaccard similarity over auto-tag sets, with a bonus per shared LoRA.
+  // Computed on detail open; at library scale this is a few ms.
+  function similarItems(item, limit) {
+    var mine = new Set(item.autoTags || []);
+    var myLoras = new Set((item.loras || []).map(function (l) { return l.name; }));
+    var scored = [];
+    state.items.forEach(function (other) {
+      if (other.id === item.id) return;
+      var theirs = new Set(other.autoTags || []);
+      var inter = 0;
+      theirs.forEach(function (t) { if (mine.has(t)) inter++; });
+      var union = mine.size + theirs.size - inter;
+      var score = union ? inter / union : 0;
+      (other.loras || []).forEach(function (l) { if (myLoras.has(l.name)) score += 0.15; });
+      if (score >= 0.15) scored.push({ item: other, score: score });
+    });
+    scored.sort(function (x, y) { return y.score - x.score; });
+    return scored.slice(0, limit || 8);
+  }
+  function renderSimilar(item) {
+    var strip = $('similarStrip');
+    var sims = similarItems(item, 8);
+    if (!sims.length) { strip.innerHTML = '<p class="similar-empty">似たプロンプトは見つかりませんでした</p>'; return; }
+    strip.innerHTML = sims.map(function (s) {
+      var url = getImageUrl(s.item, 'thumb');
+      var img = url ? '<img alt="" loading="lazy" src="' + url + '">' : (appMode === 'drive' && s.item.fileHash ? '<img alt="" loading="lazy" data-remote="' + s.item.id + '|thumb">' : '<span class="no-image">画像なし</span>');
+      return '<button type="button" class="similar-card" data-similar="' + s.item.id + '">' + img + '<span>類似度 ' + Math.round(s.score * 100) + '%</span></button>';
+    }).join('');
+    hydrateRemoteImages(strip);
+    strip.querySelectorAll('[data-similar]').forEach(function (b) {
+      b.addEventListener('click', function () { openDetail(b.getAttribute('data-similar')); });
+    });
+  }
+
+  // ---------- two-item comparison ----------
+  function tokenSet(item) {
+    var set = new Set();
+    (item.positive || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean).forEach(function (t) { set.add(t); });
+    return set;
+  }
+  function openCompare(a, b) {
+    var body = $('compareBody');
+    var cols = [a, b].map(function (item, idx) {
+      var url = getImageUrl(item, 'full') || getImageUrl(item, 'thumb');
+      var img = url ? '<img alt="" src="' + url + '">' : (appMode === 'drive' && item.fileHash ? '<img alt="" data-cmp-remote="' + item.id + '">' : '<div class="no-image">画像なし</div>');
+      return '<div class="compare-item">' + img + '<h3>' + (idx === 0 ? 'A: ' : 'B: ') + esc(item.title || item.fileName || '（タイトルなし）') + '</h3></div>';
+    }).join('');
+    var rowsA = {}, rowsB = {}, labels = [];
+    genInfoRows(a).forEach(function (r) { rowsA[r[0]] = r[1]; if (labels.indexOf(r[0]) === -1) labels.push(r[0]); });
+    genInfoRows(b).forEach(function (r) { rowsB[r[0]] = r[1]; if (labels.indexOf(r[0]) === -1) labels.push(r[0]); });
+    var table = '<table class="compare-table"><tr><th>項目</th><th>A</th><th>B</th></tr>' + labels.map(function (k) {
+      var va = rowsA[k] != null ? rowsA[k] : '—', vb = rowsB[k] != null ? rowsB[k] : '—';
+      return '<tr' + (va !== vb ? ' class="is-diff"' : '') + '><th>' + esc(k) + '</th><td>' + esc(va) + '</td><td>' + esc(vb) + '</td></tr>';
+    }).join('') + '</table>';
+    var sa = tokenSet(a), sb = tokenSet(b);
+    var onlyA = [], onlyB = [], both = [];
+    sa.forEach(function (t) { (sb.has(t) ? both : onlyA).push(t); });
+    sb.forEach(function (t) { if (!sa.has(t)) onlyB.push(t); });
+    function tokenRow(title, list, cls) {
+      if (!list.length) return '';
+      return '<h3 class="detail-sub">' + esc(title) + '（' + list.length + '）</h3><div class="diff-tokens">' +
+        list.map(function (t) { return '<span class="diff-token ' + cls + '">' + esc(t) + '</span>'; }).join('') + '</div>';
+    }
+    body.innerHTML = '<div class="compare-cols">' + cols + '</div>' + table +
+      tokenRow('Aのみのトークン', onlyA, 'only-a') + tokenRow('Bのみのトークン', onlyB, 'only-b') + tokenRow('共通トークン', both, 'both');
+    body.querySelectorAll('[data-cmp-remote]').forEach(function (img) {
+      var item = state.items.find(function (i) { return i.id === img.getAttribute('data-cmp-remote'); });
+      if (item) showProgressive(img, item);
+    });
+    $('compareView').hidden = false;
+  }
+  function closeCompare() { $('compareView').hidden = true; }
+
   // ---------- all-tags browser ----------
   // Rough category rules for browsing 1,800+ auto tags; a tag lands in
   // the first category it matches, everything else falls to その他.
@@ -1787,7 +2027,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     ['人数・主体', /girl|boy|solo|multiple|no humans|female|male/],
     ['髪', /hair/],
     ['目', /eye/],
-    ['衣装', /dress|skirt|uniform|swimsuit|cloth|shirt|jacket|hoodie|kimono|maid|bikini|socks|shoes|hat|ribbon|glove|earring|jewel|necklace|apron|coat|pants|boots|tie/],
+    ['衣装', /dress|skirt|uniform|swimsuit|cloth|shirt|jacket|hoodie|kimono|maid|bikini|socks|shoes|hat|ribbon|glove|earring|jewel|necklace|apron|coat|pants|boots|tie|turtleneck|sweater/],
     ['場所・背景', /background|sky|indoor|outdoor|night|city|room|bed|school|pool|beach|sunset|forest|street|window|water/],
     ['表情・ポーズ', /smile|blush|mouth|looking|standing|sitting|lying|pose|arms|legs|hand|face|tears|sweat|tongue/]
   ];
@@ -2257,6 +2497,8 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     $('editTags').value = (item.tags || []).join(', ');
     $('editMemo').value = item.memo || '';
     $('editPositive').value = item.positive || '';
+    renderPromptBlocks(item);
+    renderSimilar(item);
     $('editNegative').value = item.negative || '';
     syncDetailFav(item);
     $('genInfo').innerHTML = genInfoRows(item).map(function (r) {
@@ -2949,6 +3191,22 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       clearTimeout(searchTimer);
       searchTimer = setTimeout(function () { state.query = value; state.shown = PAGE; render(); }, 180);
     });
+    $('museconUrl').value = museconConfig().url;
+    $('museconKey').value = museconConfig().key;
+    $('museconSaveBtn').addEventListener('click', function () {
+      try {
+        localStorage.setItem('pw-musecon-url', $('museconUrl').value.trim());
+        localStorage.setItem('pw-musecon-key', $('museconKey').value.trim());
+        toast('MuseCon連携設定を保存しました（この端末内のみ）');
+      } catch (e) { toast('保存できませんでした'); }
+    });
+    $('museconTestBtn').addEventListener('click', function () { museconTest(); });
+    $('regenSameBtn').addEventListener('click', function () { var item = currentItem(); if (item) museconGenerate(item, false); });
+    $('regenVarBtn').addEventListener('click', function () { var item = currentItem(); if (item) museconGenerate(item, true); });
+    $('copyRequestBtn').addEventListener('click', function () {
+      var item = currentItem(); if (!item) return;
+      copyText(JSON.stringify(museconPayload(item, false), null, 2), '再生成リクエスト');
+    });
     $('bulkModeBtn').addEventListener('click', function () { setSelectMode(!state.selectMode); });
     $('bulkExitBtn').addEventListener('click', function () { setSelectMode(false); });
     $('bulkClearBtn').addEventListener('click', function () { state.selectedIds.clear(); render(); });
@@ -2981,10 +3239,33 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       }
     });
     $('bulkDeleteBtn').addEventListener('click', function () { bulkDelete(); });
+    $('bulkCompareBtn').addEventListener('click', function () {
+      var sel = selectedItems();
+      if (sel.length !== 2) { toast('比較には2件を選択してください（現在 ' + sel.length + ' 件）'); return; }
+      openCompare(sel[0], sel[1]);
+    });
+    $('compareClose').addEventListener('click', function () { closeCompare(); });
+    $('compareView').addEventListener('click', function (ev) { if (ev.target === this) closeCompare(); });
     $('allTagsBtn').addEventListener('click', function () { openTagBrowser(); });
     $('tagBrowserClose').addEventListener('click', function () { closeTagBrowser(); });
     $('tagBrowser').addEventListener('click', function (ev) { if (ev.target === this) closeTagBrowser(); });
     $('tagBrowserSearch').addEventListener('input', function () { renderTagBrowser(); });
+    $('promptBlocks').addEventListener('click', function (ev) {
+      var copyBtn = ev.target.closest('[data-block-copy]');
+      if (copyBtn) {
+        var g = detailBlocks[parseInt(copyBtn.getAttribute('data-block-copy'), 10)];
+        if (g) copyText(g.tokens.join(', '), g.name + 'ブロック');
+        return;
+      }
+      var tokBtn = ev.target.closest('[data-block-token]');
+      if (tokBtn) {
+        state.query = tokBtn.getAttribute('data-block-token');
+        $('searchInput').value = state.query;
+        state.shown = PAGE;
+        syncHash();
+        render();
+      }
+    });
     $('tagBrowserBody').addEventListener('click', function (ev) {
       var b = ev.target.closest('[data-tag]');
       if (!b) return;
