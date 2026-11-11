@@ -1093,7 +1093,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
   var FOLDER_NAME = 'prompt-warehouse';
   var appMode = 'local'; // 'local' | 'drive'
   var driveItemsCache = [];
-  var drive = { token: null, tokenExp: 0, folderId: null, indexId: null, fileIds: {}, ready: false, client: null, batchDepth: 0, lastIndexJson: '', pendingAuth: null };
+  var drive = { token: null, tokenExp: 0, folderId: null, indexId: null, fileIds: {}, ready: false, client: null, batchDepth: 0, lastIndexJson: '', pendingAuth: null, indexMd5: null, indexGeneration: 0, lastUploadMd5: null, conflict: false };
   function driveClientId() { try { return localStorage.getItem('pw-drive-client-id') || ''; } catch (e) { return ''; } }
   function driveSetStatus(text) { var el = document.getElementById('driveStatus'); if (el) el.textContent = text; }
   function updateDriveUi() {
@@ -1199,11 +1199,11 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     form.append('metadata', new Blob([JSON.stringify(meta)], { type: 'application/json' }));
     form.append('file', blob);
     var base = 'https://www.googleapis.com/upload/drive/v3/files';
-    var url = existingId ? base + '/' + existingId + '?uploadType=multipart&fields=id' : base + '?uploadType=multipart&fields=id';
+    var url = existingId ? base + '/' + existingId + '?uploadType=multipart&fields=id,md5Checksum' : base + '?uploadType=multipart&fields=id,md5Checksum';
     return fetch(url, { method: existingId ? 'PATCH' : 'POST', headers: { 'Authorization': 'Bearer ' + drive.token }, body: form }).then(function (res) {
       if (!res.ok) throw new Error('Drive upload error ' + res.status);
       return res.json();
-    }).then(function (f) { drive.fileIds[name] = f.id; return f.id; });
+    }).then(function (f) { drive.fileIds[name] = f.id; drive.lastUploadMd5 = f.md5Checksum || null; return f.id; });
   }
   function driveListAppFiles() {
     var ids = {};
@@ -1232,11 +1232,16 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
         var data = null;
         try { data = JSON.parse(text); } catch (e) { /* treat as empty */ }
         driveItemsCache = (data && data.items) || [];
+        drive.indexGeneration = (data && data.generation) || 0;
         drive.ready = true;
         updateDriveUi();
-        return driveItemsCache;
+        return driveIndexMeta().then(function (meta) { if (meta) drive.indexMd5 = meta.md5Checksum || null; return driveItemsCache; });
       });
     });
+  }
+  function driveIndexMeta() {
+    if (!drive.indexId) return Promise.resolve(null);
+    return driveApi('files/' + drive.indexId + '?fields=md5Checksum,modifiedTime').then(function (r) { return r.json(); }).catch(function () { return null; });
   }
   function driveConnect(interactive) {
     return driveEnsureToken(interactive).then(function () { return driveSetup(); });
@@ -1248,11 +1253,33 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       return copy;
     });
   }
-  function driveFlushIndex() {
+  function driveFlushIndex(force) {
     if (!drive.ready) return Promise.resolve();
-    var payload = JSON.stringify({ app: 'prompt-warehouse', version: 2, updatedAt: new Date().toISOString(), items: driveLightweightItems() });
-    drive.lastIndexJson = payload;
-    return driveUpload(INDEX_NAME, new Blob([payload], { type: 'application/json' }), drive.indexId).then(function (id) { drive.indexId = id; });
+    function doUpload() {
+      drive.indexGeneration = (drive.indexGeneration || 0) + 1;
+      var payload = JSON.stringify({ app: 'prompt-warehouse', version: 2, generation: drive.indexGeneration, updatedAt: new Date().toISOString(), items: driveLightweightItems() });
+      drive.lastIndexJson = payload;
+      return driveUpload(INDEX_NAME, new Blob([payload], { type: 'application/json' }), drive.indexId).then(function (id) {
+        drive.indexId = id;
+        if (drive.lastUploadMd5) drive.indexMd5 = drive.lastUploadMd5;
+        drive.conflict = false;
+      });
+    }
+    // Optimistic concurrency: if the index file changed since we loaded
+    // it (another tab, or the direct-registration tool), do not silently
+    // overwrite - the other writer bumped the same file. md5Checksum is
+    // the token; the generation counter inside the payload is the
+    // human-readable ordering both writers maintain.
+    if (!drive.indexId || !drive.indexMd5 || force) return doUpload();
+    return driveIndexMeta().then(function (meta) {
+      if (meta && meta.md5Checksum && meta.md5Checksum !== drive.indexMd5) {
+        drive.conflict = true;
+        driveSetStatus('索引の競合を検出しました');
+        var ok = window.confirm('ドライブの索引が、別のタブや直接登録ツールによって更新されています。\nこのまま保存すると、そちらの変更を上書きします。保存しますか？\n（キャンセルすると保存を止めます。ページを再読み込みすると相手の内容を取り込めます）');
+        if (!ok) { toast('索引の保存を止めました（競合を検出）'); return null; }
+      }
+      return doUpload();
+    }).catch(function () { return doUpload(); });
   }
   function drivePutItem(item) {
     var existing = driveItemsCache.findIndex(function (i) { return i.id === item.id; });
@@ -1397,19 +1424,29 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
   function driveRefresh() {
     if (appMode !== 'drive' || !drive.ready || !drive.indexId || state.selectedId) return;
     driveEnsureToken(false).then(function () {
-      return driveApi('files/' + drive.indexId + '?alt=media');
-    }).then(function (r) { return r.text(); }).then(function (text) {
-      if (text && text !== drive.lastIndexJson) {
-        var data = null;
-        try { data = JSON.parse(text); } catch (e) { return; }
-        if (data && Array.isArray(data.items)) {
-          drive.lastIndexJson = text;
-          driveItemsCache = data.items;
-          state.items = data.items.slice();
-          render();
-          driveListAppFiles().catch(function () {});
+      return driveIndexMeta();
+    }).then(function (meta) {
+      // Cheap probe first: when the checksum is unchanged the full
+      // index download (megabytes) is skipped entirely.
+      if (meta && drive.indexMd5 && meta.md5Checksum === drive.indexMd5) return null;
+      var probedMd5 = meta && meta.md5Checksum ? meta.md5Checksum : null;
+      return driveApi('files/' + drive.indexId + '?alt=media').then(function (r) { return r.text(); }).then(function (text) {
+        if (text && text !== drive.lastIndexJson) {
+          var data = null;
+          try { data = JSON.parse(text); } catch (e) { return; }
+          if (data && Array.isArray(data.items)) {
+            drive.lastIndexJson = text;
+            driveItemsCache = data.items;
+            drive.indexGeneration = data.generation || drive.indexGeneration;
+            if (probedMd5) drive.indexMd5 = probedMd5;
+            state.items = data.items.slice();
+            render();
+            driveListAppFiles().catch(function () {});
+          }
+        } else if (probedMd5) {
+          drive.indexMd5 = probedMd5;
         }
-      }
+      });
     }).catch(function () { /* stay quiet on background refresh */ });
   }
   setInterval(function () { if (document.visibilityState === 'visible') driveRefresh(); }, 60000);
