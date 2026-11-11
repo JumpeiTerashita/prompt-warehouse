@@ -83,6 +83,7 @@ button { cursor: pointer; }
 .side-section h2 { font-size: 13px; font-weight: 600; color: var(--muted); margin: 0 0 var(--sp-2); }
 .toggle-label { font-size: var(--fs-small); color: var(--muted); display: flex; gap: 4px; align-items: center; white-space: nowrap; }
 .tag-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.tag-list button.is-active { background: var(--accent-track); color: var(--accent-ink); font-weight: 600; }
 .tag-list button { display: flex; justify-content: space-between; width: 100%; padding: 4px var(--sp-2); border: 0; background: transparent; border-radius: var(--radius-control); text-align: left; gap: 8px; }
 .tag-list button:hover { background: var(--raised); }
 .tag-list .tag-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -143,6 +144,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
 #thumbFitSelect { height: 38px; border: 1px solid var(--control); border-radius: var(--radius-control); background: var(--surface); padding: 0 8px; }
 #toastAction { margin-left: var(--sp-2); border: 0; border-radius: 999px; padding: 4px 12px; background: var(--accent); color: #fff; font-size: var(--fs-small); cursor: pointer; }
 .pill-auto { color: var(--muted); }
+.pill-chara { background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
 .pill-lora { background: var(--accent-soft); color: var(--accent-ink); }
 .card-prompt { color: var(--muted); font-size: var(--fs-small); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; margin: 0; }
 .card-meta { color: var(--muted); font-size: var(--fs-small); display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; }
@@ -300,6 +302,11 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       <h2>セット（取り込み単位）</h2>
       <select id="batchSelect" class="batch-select" aria-label="セットで絞り込み"></select>
       <p class="side-note">並び替えを「ランダム」にすると、セット内シャッフル再生になります。</p>
+    </div>
+
+    <div class="side-section">
+      <h2>キャラ（自動判定）</h2>
+      <ul id="charaList" class="tag-list"></ul>
     </div>
 
     <div class="side-section">
@@ -1433,6 +1440,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     query: '',
     activeTags: [],
     batch: '',
+    chara: '',
     sort: 'new',
     shown: 100,
     selectedId: null,
@@ -1455,6 +1463,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     if (state.filter !== 'all') params.set('f', state.filter);
     if (state.activeTags.length) params.set('tags', state.activeTags.join(','));
     if (state.batch) params.set('set', state.batch);
+    if (state.chara) params.set('ch', state.chara);
     if (state.sort !== 'new') params.set('sort', state.sort);
     if (state.thumbFit !== 'crop') params.set('fit', state.thumbFit);
     if (state.selectedId) params.set('item', state.selectedId);
@@ -1471,6 +1480,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     if (['all', 'favorite', 'imageonly', 'comfy', 'a1111'].indexOf(f) !== -1) state.filter = f;
     if (params.get('tags')) state.activeTags = params.get('tags').split(',').filter(Boolean);
     if (params.get('set')) state.batch = params.get('set');
+    if (params.get('ch')) state.chara = params.get('ch');
     var s = params.get('sort');
     if (['new', 'old', 'title', 'fav', 'random'].indexOf(s) !== -1) state.sort = s;
     var fit = params.get('fit');
@@ -1518,6 +1528,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       }
     }
     if (parsed.latentWidth) { item.latentWidth = parsed.latentWidth; item.latentHeight = parsed.latentHeight; }
+    item.chara = detectCharacters(item);
     return item;
   }
 
@@ -1602,6 +1613,63 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     });
   }
 
+  // ---------- characters (auto facet) ----------
+  // Detection runs at import time and is stored on the item; items that
+  // predate it (or arrive from the direct-registration tool) are detected
+  // on the fly with the same dictionary. Name tokens are decisive;
+  // otherwise distinctive feature tokens must add up to the threshold.
+  // It is a guide, not a guarantee: co-star images can match several.
+  var CHARACTERS = [
+    { id: 'sazae', label: 'サザエガール', names: ['sazae', 'サザエ'], feats: [['beauty mole below the left corner', 2], ['reddish purple hair', 1], ['center part bangs', 1]], need: 3 },
+    { id: 'sayo', label: 'サヨ', names: ['sayo', 'サヨ', 'isono'], feats: [['red cord', 2], ['cord knot', 2], ['high ponytail', 1]], need: 2 },
+    { id: 'garnet', label: 'ガーネット', names: ['garnet', 'ガーネット', 'sutherland'], feats: [['deep garnet', 2], ['wine-red dress', 2], ['wine red dress', 2]], need: 2 },
+    { id: 'sasha', label: 'サシャ', names: ['sasha', 'サシャ'], feats: [['pantsuit', 2], ['rectangular glasses', 1], ['black-framed glasses', 1]], need: 2 },
+    { id: 'suzie', label: 'スージィ', names: ['suzie', 'スージィ'], feats: [['round glasses', 2], ['oversized hoodie', 1], ['white hoodie', 1]], need: 2 }
+  ];
+  function detectCharacters(item) {
+    var text = [item.positive || '', item.fileName || '',
+      (item.loras || []).map(function (l) { return l.name; }).join(' '),
+      (item.lorasInPrompt || []).map(function (l) { return l.name; }).join(' ')].join('\n').toLowerCase();
+    var out = [];
+    CHARACTERS.forEach(function (c) {
+      for (var i = 0; i < c.names.length; i++) if (text.indexOf(c.names[i]) !== -1) { out.push(c.id); return; }
+      var score = 0;
+      c.feats.forEach(function (f) { if (text.indexOf(f[0]) !== -1) score += f[1]; });
+      if (score >= c.need) out.push(c.id);
+    });
+    return out;
+  }
+  function charaOf(item) {
+    return (Array.isArray(item.chara) && item.chara.length) ? item.chara : detectCharacters(item);
+  }
+  function charaLabel(id) {
+    var c = CHARACTERS.find(function (x) { return x.id === id; });
+    return c ? c.label : id;
+  }
+  var charaOptionsSig = null;
+  function renderCharaOptions() {
+    var counts = {};
+    state.items.forEach(function (item) { charaOf(item).forEach(function (id) { counts[id] = (counts[id] || 0) + 1; }); });
+    var sig = CHARACTERS.map(function (c) { return c.id + ':' + (counts[c.id] || 0); }).join('|') + '/' + state.chara;
+    if (sig === charaOptionsSig) return;
+    charaOptionsSig = sig;
+    var ul = $('charaList');
+    if (!ul) return;
+    ul.innerHTML = CHARACTERS.filter(function (c) { return counts[c.id]; }).map(function (c) {
+      return '<li><button type="button" data-chara="' + c.id + '"' + (state.chara === c.id ? ' class="is-active"' : '') + '>' +
+        '<span>' + esc(c.label) + '</span><span>' + counts[c.id] + '</span></button></li>';
+    }).join('');
+    ul.querySelectorAll('button[data-chara]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        state.chara = state.chara === b.getAttribute('data-chara') ? '' : b.getAttribute('data-chara');
+        state.shown = PAGE;
+        charaOptionsSig = null;
+        syncHash();
+        render();
+      });
+    });
+  }
+
   // ---------- sets (import batches) ----------
   // New imports carry an explicit batchId. Items without one (everything
   // registered before sets existed) are grouped by registration time:
@@ -1674,6 +1742,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       if (state.filter === 'comfy' && item.sourceFormat !== 'comfy') return false;
       if (state.filter === 'a1111' && item.sourceFormat !== 'a1111') return false;
       if (state.batch && batchIdOf(item) !== state.batch) return false;
+      if (state.chara && charaOf(item).indexOf(state.chara) === -1) return false;
       for (var i = 0; i < state.activeTags.length; i++) {
         var t = state.activeTags[i];
         if ((item.autoTags || []).indexOf(t) === -1 && (item.tags || []).indexOf(t) === -1) return false;
@@ -1749,6 +1818,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     $('qualityToggle').checked = state.excludeQuality;
     document.querySelectorAll('.nav-row').forEach(function (b) { b.classList.toggle('is-active', b.getAttribute('data-filter') === state.filter); });
     renderBatchOptions();
+    renderCharaOptions();
     (function () {
       var bar = $('setBar');
       if (!bar) return;
@@ -1774,6 +1844,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       var remoteThumb = (!thumbUrl && appMode === 'drive' && item.fileHash) ? item.id + '|thumb' : null;
       var title = item.title || item.fileName || '（タイトルなし）';
       var pills = '';
+      charaOf(item).forEach(function (cid) { pills += '<button type="button" class="pill pill-chara" data-chara="' + cid + '" title="このキャラで絞り込む">' + esc(charaLabel(cid)) + '</button>'; });
       (item.tags || []).slice(0, 4).forEach(function (t) { pills += '<button type="button" class="pill" data-tag="' + esc(t) + '" title="このタグで絞り込む">' + esc(t) + '</button>'; });
       if (!(item.tags || []).length) (item.autoTags || []).filter(function (t) { return !state.excludeQuality || PW.QUALITY_TAGS.indexOf(t) === -1; }).slice(0, 4).forEach(function (t) { pills += '<button type="button" class="pill pill-auto" data-tag="' + esc(t) + '" title="このタグで絞り込む">' + esc(t) + '</button>'; });
       (item.loras || []).forEach(function (l) { pills += '<button type="button" class="pill pill-lora" data-search="' + esc(l.name.replace(/\.safetensors$/, '')) + '" title="このLoRAで検索">' + esc(l.name.replace(/\.safetensors$/, '')) + (l.strengthModel != null ? ' ' + l.strengthModel : '') + '</button>'; });
@@ -1798,6 +1869,15 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
         if (ev.target.closest('[data-fav]')) return;
         var tagBtn = ev.target.closest('[data-tag]');
         if (tagBtn) { toggleTag(tagBtn.getAttribute('data-tag')); return; }
+        var charaBtn = ev.target.closest('[data-chara]');
+        if (charaBtn) {
+          state.chara = charaBtn.getAttribute('data-chara');
+          state.shown = PAGE;
+          charaOptionsSig = null;
+          syncHash();
+          render();
+          return;
+        }
         var searchBtn = ev.target.closest('[data-search]');
         if (searchBtn) {
           state.query = searchBtn.getAttribute('data-search');
@@ -1862,6 +1942,10 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       var bc = computeBatches();
       var g = bc.list.find(function (x) { return x.id === batchIdOf(item); });
       if (g) add('セット', batchLabel(g));
+    (function () {
+      var cs = charaOf(item);
+      if (cs.length) add('キャラ（自動判定）', cs.map(charaLabel).join('、'));
+    })();
     })();
     add('モデル', item.model);
     (item.loras || []).forEach(function (l, i) {
@@ -2455,6 +2539,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
             return;
           }
           var item = Object.assign({ imageBlob: null, thumbBlob: null, tags: [], autoTags: [], loras: [], favorite: false, batchId: 'b' + Date.now().toString(36) }, raw);
+          if (!Array.isArray(item.chara)) item.chara = detectCharacters(item);
           item.imageBlob = imageBlob;
           var thumbStep = imageBlob ? makeThumbnail(imageBlob).then(function (t) { item.thumbBlob = t; }) : Promise.resolve();
           return thumbStep.then(function () {
