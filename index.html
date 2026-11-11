@@ -85,7 +85,7 @@ button { cursor: pointer; }
 .tag-list .tag-count { color: var(--muted); font-size: var(--fs-small); font-variant-numeric: tabular-nums; }
 .tag-list button.is-active { background: var(--accent-track); color: var(--accent-ink); }
 .side-foot { margin-top: auto; display: flex; flex-direction: column; gap: 6px; }
-.side-action { border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius-control); height: 32px; text-align: center; }
+.side-action { border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius-control); min-height: 32px; height: auto; padding: 5px 10px; line-height: 1.35; text-align: center; overflow-wrap: anywhere; }
 .side-action:hover { background: var(--raised); }
 .side-note { color: var(--muted); font-size: var(--fs-small); margin: 6px 0 0; }
 
@@ -243,7 +243,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
   .side-section h2 { margin-bottom: 6px; }
   .seg-btn { height: 36px; }
   .side-foot { flex-direction: row; flex-wrap: wrap; gap: 6px; }
-  .side-action { flex: 1 1 42%; height: 36px; }
+  .side-action { flex: 1 1 42%; min-height: 36px; height: auto; font-size: 13px; padding: 6px 8px; }
   .side-note { flex: 1 1 100%; margin: 2px 0 0; }
   #canvas { padding: 16px 12px 56px; }
   .title-row h1 { font-size: 22px; }
@@ -1186,14 +1186,65 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       return url;
     }).catch(function () { return null; });
   }
+  function loadRemoteImg(img) {
+    var parts = img.getAttribute('data-remote').split('|');
+    var item = state.items.find(function (i) { return i.id === parts[0]; });
+    if (!item) return;
+    ensureRemoteUrl(item, parts[1]).then(function (url) { if (url && img.isConnected) img.src = url; });
+  }
+  var remoteObserver = null;
   function hydrateRemoteImages(root) {
     if (appMode !== 'drive') return;
-    (root || document).querySelectorAll('img[data-remote]').forEach(function (img) {
-      var parts = img.getAttribute('data-remote').split('|');
-      var item = state.items.find(function (i) { return i.id === parts[0]; });
-      if (!item) return;
-      ensureRemoteUrl(item, parts[1]).then(function (url) { if (url && img.isConnected) img.src = url; });
-    });
+    var imgs = (root || document).querySelectorAll('img[data-remote]:not([data-hydrated])');
+    // Only fetch Drive images that are on (or near) the screen. On a phone the
+    // grid renders 100 cards; fetching every thumbnail up front was the main
+    // reason the gallery felt slow to load.
+    if (!('IntersectionObserver' in window)) {
+      imgs.forEach(function (img) { img.setAttribute('data-hydrated', '1'); loadRemoteImg(img); });
+      return;
+    }
+    if (!remoteObserver) {
+      remoteObserver = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (!entry.isIntersecting) return;
+          remoteObserver.unobserve(entry.target);
+          entry.target.setAttribute('data-hydrated', '1');
+          loadRemoteImg(entry.target);
+        });
+      }, { rootMargin: '600px' });
+    }
+    imgs.forEach(function (img) { remoteObserver.observe(img); });
+  }
+  // Progressive display: show the (already cached, small) thumbnail instantly,
+  // then swap to the full image only after it has actually loaded. Keeps the
+  // screen from going black while a multi-MB original downloads.
+  function showProgressive(img, item) {
+    img._pwItemId = item.id;
+    var localFull = getImageUrl(item, 'full');
+    var localThumb = getImageUrl(item, 'thumb');
+    if (localFull || localThumb) {
+      if (localFull && localThumb && localFull !== localThumb) {
+        img.src = localThumb;
+        var pre = new Image();
+        pre.onload = function () { if (img._pwItemId === item.id && img.isConnected) img.src = localFull; };
+        pre.src = localFull;
+      } else if (localFull || localThumb) {
+        img.src = localFull || localThumb;
+      }
+      return;
+    }
+    if (appMode === 'drive' && item.fileHash) {
+      ensureRemoteUrl(item, 'thumb').then(function (url) {
+        if (url && img._pwItemId === item.id && img.isConnected && !img.getAttribute('data-full-done')) img.src = url;
+      });
+      ensureRemoteUrl(item, 'full').then(function (url) {
+        if (url && img._pwItemId === item.id && img.isConnected) { img.setAttribute('data-full-done', '1'); img.src = url; }
+      });
+    }
+  }
+  function prefetchFull(item) {
+    if (!item) return;
+    if (appMode === 'drive' && item.fileHash && !getImageUrl(item, 'full')) ensureRemoteUrl(item, 'full');
   }
   function driveRefresh() {
     if (appMode !== 'drive' || !drive.ready || !drive.indexId || state.selectedId) return;
@@ -1724,7 +1775,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     var wrap = $('detailImageWrap');
     var url = getImageUrl(item, 'full');
     if (url) { wrap.innerHTML = '<img alt="" src="' + url + '">'; }
-    else if (appMode === 'drive' && item.fileHash) { wrap.innerHTML = '<img alt="" data-remote="' + item.id + '|full">'; hydrateRemoteImages(wrap); }
+    else if (appMode === 'drive' && item.fileHash) { wrap.innerHTML = '<img alt="">'; showProgressive(wrap.querySelector('img'), item); }
     else wrap.innerHTML = '<div class="no-image">画像なし（プロンプトのみの登録）</div>';
     var detailImg = wrap.querySelector('img');
     if (detailImg) detailImg.addEventListener('click', function () { openViewer(item.id); });
@@ -1783,14 +1834,12 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     img.style.transition = 'none';
     img.style.transform = '';
     img.removeAttribute('data-remote');
+    img.removeAttribute('data-full-done');
     if (!item) { img.removeAttribute('src'); return; }
-    var full = getImageUrl(item, 'full');
-    if (full) { img.src = full; return; }
-    img.removeAttribute('src');
-    if (appMode === 'drive' && item.fileHash) {
-      img.setAttribute('data-remote', item.id + '|full');
-      hydrateRemoteImages($('lightbox'));
-    }
+    showProgressive(img, item);
+    // Warm the neighbours so swiping feels instant.
+    prefetchFull(viewer.list[lightbox.idx - 1]);
+    prefetchFull(viewer.list[lightbox.idx + 1]);
   }
   function openLightbox(idx) {
     lightbox.open = true;
@@ -1932,9 +1981,11 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     var item = viewer.list[i];
     var remote = img.getAttribute('data-full-remote');
     if (remote) {
-      img.removeAttribute('src');
-      img.setAttribute('data-remote', remote);
-      hydrateRemoteImages(slide);
+      // Do NOT blank the slide: the thumbnail stays visible until the full
+      // image is in hand, then it swaps in one step.
+      ensureRemoteUrl(item, 'full').then(function (url) { if (url && img.isConnected) img.src = url; });
+      prefetchFull(viewer.list[i - 1]);
+      prefetchFull(viewer.list[i + 1]);
       return;
     }
     var full = img.getAttribute('data-full');
@@ -2419,7 +2470,10 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     $('thumbFitSelect').addEventListener('change', function () {
       state.thumbFit = this.value === 'contain' ? 'contain' : 'crop';
       try { localStorage.setItem('pw-thumb-fit', state.thumbFit); } catch (e) {}
-      render();
+      // Class toggle only: re-rendering here rebuilt every card and made the
+      // thumbnails load all over again.
+      $('grid').className = 'grid' + (state.thumbFit === 'contain' ? ' fit-contain' : '');
+      syncHash();
     });
     $('qualityToggle').addEventListener('change', function () {
       state.excludeQuality = this.checked;
