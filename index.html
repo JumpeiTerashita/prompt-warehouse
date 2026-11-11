@@ -92,6 +92,16 @@ button { cursor: pointer; }
 .side-foot { margin-top: auto; display: flex; flex-direction: column; gap: var(--sp-1); }
 .side-action { border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius-control); min-height: 32px; height: auto; padding: 4px var(--sp-2); line-height: 1.35; text-align: center; overflow-wrap: anywhere; }
 .side-action:hover { background: var(--raised); }
+.tag-browser { position: fixed; inset: 0; z-index: 320; background: rgba(24, 18, 20, 0.5); display: flex; align-items: flex-start; justify-content: center; padding: 4vh 12px; }
+.tag-browser[hidden] { display: none; }
+.tag-browser-panel { background: var(--surface); color: var(--text); border-radius: var(--radius-card); width: min(760px, 100%); max-height: 88vh; display: flex; flex-direction: column; overflow: hidden; }
+.tag-browser-head { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-3) var(--sp-4); border-bottom: 1px solid var(--rule); }
+.tag-browser-head h2 { font-size: var(--fs-section); margin: 0; }
+.tag-browser-head input { flex: 1; min-height: 36px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface); color: var(--text); padding: 0 var(--sp-2); }
+.tag-browser-body { overflow-y: auto; padding: var(--sp-3) var(--sp-4); }
+.tag-browser-body h3 { font-size: var(--fs-small); color: var(--muted); margin: var(--sp-3) 0 var(--sp-1); }
+.tag-browser-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.tag-browser-tags .pill.is-active { background: var(--accent); color: #fff; }
 .bulk-bar { display: flex; align-items: center; gap: var(--sp-1); flex-wrap: wrap; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 8px var(--sp-3); margin-top: var(--sp-3); font-size: var(--fs-small); }
 .bulk-bar[hidden] { display: none; }
 .bulk-tag-wrap { display: inline-flex; gap: 4px; align-items: center; }
@@ -304,6 +314,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       <button class="nav-row" data-filter="imageonly" type="button"><span>画像のみ</span><span class="nav-count" id="countImageOnly">0</span></button>
       <button class="nav-row" data-filter="comfy" type="button"><span>ComfyUI</span><span class="nav-count" id="countComfy">0</span></button>
       <button class="nav-row" data-filter="a1111" type="button"><span>A1111</span><span class="nav-count" id="countA1111">0</span></button>
+      <button class="nav-row" data-filter="dup" type="button"><span>重複</span><span class="nav-count" id="countDup">0</span></button>
     </nav>
 
     <div class="side-section">
@@ -322,6 +333,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
         <h2>人気のタグ</h2>
         <span class="side-head-actions">
           <label class="toggle-label"><input type="checkbox" id="qualityToggle"> 品質系を除く</label>
+          <button id="allTagsBtn" class="tags-toggle" type="button" title="全タグをカテゴリ別に見る">全タグ</button>
           <button id="tagsToggle" class="tags-toggle" type="button" aria-expanded="true" aria-controls="popularTags" title="タグ一覧を開く／閉じる"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M5 9l7 7 7-7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         </span>
       </div>
@@ -371,7 +383,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       いま開いている環境では、ブラウザの保存領域がブロックされているため、登録はこの表示を閉じるまでの仮保存になります。ファイルをダウンロードしてブラウザで直接開くと、登録が残ります。
     </div>
     <div class="filter-row">
-      <input id="searchInput" type="search" placeholder="プロンプト、ファイル名、seed、LoRA、モデル、サイズから検索..." aria-label="検索">
+      <input id="searchInput" type="search" placeholder="検索：プロンプト・seed・LoRA・モデル（-除外 / OR 可）" aria-label="検索">
       <select id="sortSelect" aria-label="並び替え">
         <option value="new">新しい順</option>
         <option value="old">古い順</option>
@@ -415,6 +427,17 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     </div>
     <button id="moreBtn" class="btn more-btn" type="button" hidden>もっと表示</button>
   </main>
+
+  <div id="tagBrowser" class="tag-browser" hidden>
+    <div class="tag-browser-panel" role="dialog" aria-label="全タグブラウザ">
+      <div class="tag-browser-head">
+        <h2>全タグ</h2>
+        <input id="tagBrowserSearch" type="search" placeholder="タグを絞り込み" aria-label="タグを絞り込み">
+        <button id="tagBrowserClose" class="btn btn-small" type="button">閉じる</button>
+      </div>
+      <div id="tagBrowserBody" class="tag-browser-body"></div>
+    </div>
+  </div>
 
   <aside id="detail" class="detail" hidden aria-label="画像の詳細">
     <div class="detail-head">
@@ -1500,7 +1523,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     try { params = new URLSearchParams(location.hash.slice(1)); } catch (e) { return; }
     if (params.get('q')) state.query = params.get('q');
     var f = params.get('f');
-    if (['all', 'favorite', 'imageonly', 'comfy', 'a1111'].indexOf(f) !== -1) state.filter = f;
+    if (['all', 'favorite', 'imageonly', 'comfy', 'a1111', 'dup'].indexOf(f) !== -1) state.filter = f;
     if (params.get('tags')) state.activeTags = params.get('tags').split(',').filter(Boolean);
     if (params.get('set')) state.batch = params.get('set');
     if (params.get('ch')) state.chara = params.get('ch');
@@ -1756,6 +1779,58 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     if (sel.value !== state.batch) sel.value = state.batch;
   }
 
+  // ---------- all-tags browser ----------
+  // Rough category rules for browsing 1,800+ auto tags; a tag lands in
+  // the first category it matches, everything else falls to その他.
+  var TAG_CATEGORY_RULES = [
+    ['品質', function (t) { return PW.QUALITY_TAGS.indexOf(t) !== -1; }],
+    ['人数・主体', /girl|boy|solo|multiple|no humans|female|male/],
+    ['髪', /hair/],
+    ['目', /eye/],
+    ['衣装', /dress|skirt|uniform|swimsuit|cloth|shirt|jacket|hoodie|kimono|maid|bikini|socks|shoes|hat|ribbon|glove|earring|jewel|necklace|apron|coat|pants|boots|tie/],
+    ['場所・背景', /background|sky|indoor|outdoor|night|city|room|bed|school|pool|beach|sunset|forest|street|window|water/],
+    ['表情・ポーズ', /smile|blush|mouth|looking|standing|sitting|lying|pose|arms|legs|hand|face|tears|sweat|tongue/]
+  ];
+  function tagCategory(t) {
+    for (var i = 0; i < TAG_CATEGORY_RULES.length; i++) {
+      var rule = TAG_CATEGORY_RULES[i][1];
+      if (typeof rule === 'function' ? rule(t) : rule.test(t)) return TAG_CATEGORY_RULES[i][0];
+    }
+    return 'その他';
+  }
+  function renderTagBrowser() {
+    var q = $('tagBrowserSearch').value.trim().toLowerCase();
+    var counts = {};
+    state.items.forEach(function (item) {
+      (item.autoTags || []).forEach(function (t) { counts[t] = (counts[t] || 0) + 1; });
+      (item.tags || []).forEach(function (t) { counts[t] = (counts[t] || 0) + 1; });
+    });
+    var byCat = {};
+    Object.keys(counts).forEach(function (t) {
+      if (q && t.toLowerCase().indexOf(q) === -1) return;
+      var c = tagCategory(t);
+      (byCat[c] = byCat[c] || []).push({ tag: t, count: counts[t] });
+    });
+    var order = TAG_CATEGORY_RULES.map(function (r) { return r[0]; }).concat(['その他']);
+    var html = '';
+    order.forEach(function (c) {
+      var list = byCat[c];
+      if (!list || !list.length) return;
+      list.sort(function (a, b) { return b.count - a.count || a.tag.localeCompare(b.tag); });
+      html += '<h3>' + esc(c) + '（' + list.length + '）</h3><div class="tag-browser-tags">' + list.map(function (e) {
+        var active = state.activeTags.indexOf(e.tag) !== -1 ? ' is-active' : '';
+        return '<button type="button" class="pill' + active + '" data-tag="' + esc(e.tag) + '">' + esc(e.tag) + ' (' + e.count + ')</button>';
+      }).join('') + '</div>';
+    });
+    $('tagBrowserBody').innerHTML = html || '<p class="side-note">該当するタグがありません</p>';
+  }
+  function openTagBrowser() {
+    $('tagBrowser').hidden = false;
+    renderTagBrowser();
+    $('tagBrowserSearch').focus();
+  }
+  function closeTagBrowser() { $('tagBrowser').hidden = true; }
+
   // ---------- bulk edit ----------
   function selectedItems() {
     return state.items.filter(function (i) { return state.selectedIds.has(i.id); });
@@ -1857,20 +1932,33 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     return (h >>> 0) / 4294967296;
   }
   function filteredItems() {
-    var q = state.query.trim().toLowerCase();
-    var words = q ? q.split(/\s+/) : [];
+    // Query syntax: space = AND, ' OR ' between groups = either group,
+    // '-word' = exclude. Plain multi-word queries behave as before.
+    var rawQ = state.query.trim().toLowerCase();
+    var groups = [];
+    if (rawQ) {
+      groups = rawQ.split(/\s+or\s+/).map(function (g) {
+        var pos = [], neg = [];
+        g.split(/\s+/).filter(Boolean).forEach(function (w) {
+          if (w.length > 1 && w.charAt(0) === '-') neg.push(w.slice(1));
+          else if (w !== '-') pos.push(w);
+        });
+        return { pos: pos, neg: neg };
+      }).filter(function (g) { return g.pos.length || g.neg.length; });
+    }
     var list = state.items.filter(function (item) {
       if (state.filter === 'favorite' && !item.favorite) return false;
       if (state.filter === 'imageonly' && item.sourceFormat !== 'none') return false;
       if (state.filter === 'comfy' && item.sourceFormat !== 'comfy') return false;
       if (state.filter === 'a1111' && item.sourceFormat !== 'a1111') return false;
+      if (state.filter === 'dup' && !duplicateIds().has(item.id)) return false;
       if (state.batch && batchIdOf(item) !== state.batch) return false;
       if (state.chara && charaOf(item).indexOf(state.chara) === -1) return false;
       for (var i = 0; i < state.activeTags.length; i++) {
         var t = state.activeTags[i];
         if ((item.autoTags || []).indexOf(t) === -1 && (item.tags || []).indexOf(t) === -1) return false;
       }
-      if (words.length) {
+      if (groups.length) {
         var hay = [item.positive, item.negative, item.title, item.memo, item.model, item.fileName,
           item.seed != null ? String(item.seed) : '', item.sampler || '', item.scheduler || '',
           item.sourceFormat || '',
@@ -1880,7 +1968,12 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
           (item.loras || []).map(function (l) { return l.name; }).join(' '),
           (item.lorasInPrompt || []).map(function (l) { return l.name; }).join(' '),
           (item.tags || []).join(' '), (item.autoTags || []).join(' ')].join('\n').toLowerCase();
-        for (var j = 0; j < words.length; j++) if (hay.indexOf(words[j]) === -1) return false;
+        var matched = groups.some(function (g) {
+          for (var a = 0; a < g.neg.length; a++) if (hay.indexOf(g.neg[a]) !== -1) return false;
+          for (var b = 0; b < g.pos.length; b++) if (hay.indexOf(g.pos[b]) === -1) return false;
+          return true;
+        });
+        if (!matched) return false;
       }
       return true;
     });
@@ -1892,6 +1985,30 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       return b.createdAt - a.createdAt;
     });
     return list;
+  }
+
+  // Duplicate = same normalised positive prompt and model (seed may
+  // differ: same-prompt re-rolls are exactly what this is for finding).
+  var dupCache = { sig: '', ids: null };
+  function duplicateIds() {
+    var h = state.items.length + ':';
+    for (var i = 0; i < state.items.length; i++) {
+      var s = state.items[i].id + '|' + (state.items[i].positive || '') + '|' + (state.items[i].model || '');
+      var x = 0;
+      for (var j = 0; j < s.length; j++) x = (Math.imul(x, 31) + s.charCodeAt(j)) | 0;
+      h += x + ',';
+    }
+    if (dupCache.sig === h) return dupCache.ids;
+    var bySig = {};
+    state.items.forEach(function (item) {
+      if (!item.positive) return;
+      var sig = item.positive.trim().toLowerCase().replace(/\s+/g, ' ') + '|' + (item.model || '');
+      (bySig[sig] = bySig[sig] || []).push(item.id);
+    });
+    var ids = new Set();
+    Object.keys(bySig).forEach(function (k) { if (bySig[k].length > 1) bySig[k].forEach(function (id) { ids.add(id); }); });
+    dupCache = { sig: h, ids: ids };
+    return ids;
   }
 
   function popularTags() {
@@ -1914,6 +2031,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     $('countImageOnly').textContent = state.items.filter(function (i) { return i.sourceFormat === 'none'; }).length;
     $('countComfy').textContent = state.items.filter(function (i) { return i.sourceFormat === 'comfy'; }).length;
     $('countA1111').textContent = state.items.filter(function (i) { return i.sourceFormat === 'a1111'; }).length;
+    $('countDup').textContent = duplicateIds().size;
 
     var tagUl = $('popularTags');
     tagUl.innerHTML = popularTags().map(function (e) {
@@ -2863,6 +2981,16 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       }
     });
     $('bulkDeleteBtn').addEventListener('click', function () { bulkDelete(); });
+    $('allTagsBtn').addEventListener('click', function () { openTagBrowser(); });
+    $('tagBrowserClose').addEventListener('click', function () { closeTagBrowser(); });
+    $('tagBrowser').addEventListener('click', function (ev) { if (ev.target === this) closeTagBrowser(); });
+    $('tagBrowserSearch').addEventListener('input', function () { renderTagBrowser(); });
+    $('tagBrowserBody').addEventListener('click', function (ev) {
+      var b = ev.target.closest('[data-tag]');
+      if (!b) return;
+      toggleTag(b.getAttribute('data-tag'));
+      renderTagBrowser();
+    });
     $('batchSelect').addEventListener('change', function () {
       state.batch = this.value;
       state.shown = PAGE;
