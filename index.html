@@ -100,7 +100,8 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offs
 .compare-item h3 { font-size: var(--fs-small); margin: var(--sp-1) 0; overflow-wrap: anywhere; }
 .compare-table { width: 100%; border-collapse: collapse; font-size: var(--fs-small); margin-top: var(--sp-3); }
 .compare-table th, .compare-table td { border-top: 1px solid var(--rule); padding: 4px var(--sp-1); text-align: left; vertical-align: top; overflow-wrap: anywhere; }
-.gen-panel { width: min(720px, 100%); max-height: 92vh; overflow-y: auto; }
+.gen-panel { width: min(720px, 100%); max-height: 92vh; }
+.gen-body { -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 .gen-blocks { margin-bottom: var(--sp-2); }
 .gen-pal { margin: var(--sp-2) 0; }
 .gen-neg { margin: var(--sp-2) 0; }
@@ -112,7 +113,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offs
 .gen-result img { width: 100%; border-radius: var(--radius-control); display: block; }
 @media (max-width: 760px) {
   #genView { align-items: flex-end; padding: 0; }
-  #genView .gen-panel { width: 100%; max-height: 94vh; border-radius: 16px 16px 0 0; }
+  #genView .gen-panel { width: 100%; max-height: 94dvh; border-radius: 16px 16px 0 0; }
 }
 .compare-table tr.is-diff { background: var(--accent-soft); }
 .diff-tokens { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 var(--sp-2); }
@@ -543,6 +544,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
 <div id="genView" class="tag-browser" hidden role="dialog" aria-modal="true" aria-label="編集して生成">
     <div class="tag-browser-panel gen-panel">
       <div class="tag-browser-head"><h3>編集して生成</h3><button id="genClose" class="icon-btn" type="button" aria-label="閉じる">×</button></div>
+      <div class="tag-browser-body gen-body">
       <div id="genBlocks" class="gen-blocks"></div>
       <label class="field"><span>プロンプト</span><textarea id="genPositive" rows="5"></textarea></label>
       <div class="gen-pal">
@@ -559,6 +561,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       <div class="gen-result" id="genResult" hidden>
         <img id="genResultImg" alt="生成結果">
         <p class="side-note">倉庫に取り込みました。このまま直して再生成もできます。</p>
+      </div>
       </div>
     </div>
   </div>
