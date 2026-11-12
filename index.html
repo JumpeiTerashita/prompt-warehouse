@@ -546,7 +546,8 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       <div id="genBlocks" class="gen-blocks"></div>
       <label class="field"><span>プロンプト</span><textarea id="genPositive" rows="5"></textarea></label>
       <div class="gen-pal">
-        <label class="field"><span>追加パレット（ライブラリの頻出トークン）</span><select id="genPalCat"></select></label>
+        <label class="field"><span>追加パレット</span><select id="genPalSrc"><option value="lib">ライブラリ頻出</option><option value="gen">一般</option></select></label>
+        <label class="field"><span>カテゴリ</span><select id="genPalCat"></select></label>
         <div class="block-tokens" id="genPalChips"></div>
       </div>
       <details class="gen-neg"><summary>ネガティブ</summary><textarea id="genNegative" rows="2"></textarea></details>
@@ -1995,6 +1996,31 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     });
   }
 
+  // ---------- general palette data ----------
+  // Widely used prompt tokens, curated 2026-11-12 for this app:
+  // seeded from public prompt collections, measured against
+  // Gelbooru tag frequency (dataset agentlans/gelbooru-tags, CC0),
+  // spellings normalised to Anima's official guidance (lowercase,
+  // spaces not underscores), glosses written for this app. The
+  // curated categories also drive tagCategory() so blocks, the tag
+  // browser and both palettes share one taxonomy.
+  var GENERAL_PALETTE = {
+    "人数・主体": [["1girl", "女の子1人"],["1boy", "男1人"],["2girls", "女の子2人"],["solo", "単独"],["hetero", "男女の絡み"],["yuri", "百合"],["threesome", "3P"],["ffm threesome", "女2男1の3P"],["fmm threesome", "女1男2の3P"],["group sex", "複数プレイ"]],
+    "髪": [["long hair", "ロングヘア"],["very long hair", "超ロングヘア"],["short hair", "ショートヘア"],["black hair", "黒髪"],["brown hair", "茶髪"],["blonde hair", "金髪"],["pink hair", "ピンク髪"],["purple hair", "紫髪"],["red hair", "赤髪"],["white hair", "白髪"],["blue hair", "青髪"],["twintails", "ツインテール"],["ponytail", "ポニーテール"],["hair between eyes", "目元にかかる前髪"],["hair ornament", "髪飾り"],["messy hair", "乱れた髪"]],
+    "目": [["blue eyes", "青い目"],["red eyes", "赤い目"],["green eyes", "緑の目"],["purple eyes", "紫の目"],["brown eyes", "茶色い目"],["yellow eyes", "黄色い目"],["pink eyes", "ピンクの目"],["closed eyes", "閉じた目"],["half-closed eyes", "半目"],["lustful eyes", "情欲のこもった目"]],
+    "衣装": [["nude", "全裸"],["topless", "上半身裸"],["bottomless", "下半身裸"],["shirt", "シャツ"],["skirt", "スカート"],["dress", "ワンピース／ドレス"],["gloves", "手袋"],["thighhighs", "ニーハイソックス"],["pantyhose", "パンスト"],["underwear", "下着"],["panties", "パンツ"],["bra", "ブラ"],["swimsuit", "水着"],["bikini", "ビキニ"],["school uniform", "制服"],["glasses", "眼鏡"],["cat ears", "猫耳"],["kimono", "着物"],["maid", "メイド"],["lingerie", "ランジェリー"]],
+    "行為": [["fellatio", "フェラチオ"],["cooperative fellatio", "ダブルフェラ"],["implied fellatio", "フェラを匂わせる構図"],["testicle sucking", "玉舐め"],["cunnilingus", "クンニ"],["sitting on face", "顔面騎乗"],["spanking", "お尻叩き"],["anilingus", "アナル舐め"],["grabbing breasts", "乳揉み"],["breast sucking", "乳首舐め"],["nipple tweak", "乳首いじり"],["nipple play", "乳首責め"],["breast smother", "胸に顔を埋める"],["fingering", "手マン"],["handjob", "手コキ"],["cooperative handjob", "ダブル手コキ"],["footjob", "足コキ"],["clitoral stimulation", "クリ刺激"],["paizuri", "パイズリ"],["buttjob", "尻コキ"],["thigh sex", "素股"],["grinding", "擦り付け"],["tribadism", "貝合わせ"],["symmetrical docking", "乳合わせ"],["grabbing another's ass", "尻掴み"],["vaginal", "挿入中（膣）"],["anal", "アナル挿入"],["imminent penetration", "挿入寸前"],["just the tip", "先っぽだけ"],["strap-on", "ペニスバンド"],["kinbaku", "亀甲縛り"],["restrained", "拘束"],["vibrator", "バイブ／ローター"],["dildo", "ディルド"],["tentacles", "触手"],["wooden horse", "三角木馬"],["pillory", "拘束台"]],
+    "体位": [["missionary", "正常位"],["sex from behind", "後背位（本命）"],["doggystyle", "後背位（別表記）"],["cowgirl position", "騎乗位"],["reverse cowgirl position", "背面騎乗位"],["girl on top", "女の子が上"],["mating press", "種付けプレス"],["prone bone", "寝バック"],["spooning", "側位・寄り添い"],["suspended congress", "駅弁"],["spitroast", "前後同時"],["top-down bottom-up", "お尻だけ上げたバック"],["folded", "まんぐり返し"],["standing sex", "立位"]],
+    "表情": [["blush", "赤面"],["embarrassed", "恥ずかしがる"],["open mouth", "開いた口"],["tongue out", "舌出し"],["drooling", "よだれ"],["saliva", "唾液"],["heavy breathing", "激しい息遣い"],["sweat", "汗"],["sweaty skin", "汗ばんだ肌"],["tears", "涙"],["tearing up", "涙目"],["ahegao", "アヘ顔"],["ecstasy face", "快楽に溺れた顔"],["trembling", "震え"],["orgasm", "絶頂"],["heart-shaped pupils", "ハート瞳"],["wavy mouth", "波状の口（快感）"],["empty eyes", "放心した目"],["looking at viewer", "こちらを見る"],["eye contact", "目線合わせ"],["smile", "笑顔"],["angry", "怒り"]],
+    "体液": [["cum in pussy", "中出し（本命）"],["cum in mouth", "口内射精"],["cum on breasts", "胸に射精"],["cum on body", "身体に射精"],["cum on ass", "お尻に射精"],["cum on face", "顔射"],["ejaculation", "射精"],["projectile cum", "勢いのある射精"],["precum", "カウパー（我慢汁）"],["female ejaculation", "潮吹き"],["pussy juice", "愛液"],["lactation", "母乳"],["erection", "勃起"],["half-erect", "半勃起"],["flaccid", "非勃起"],["testicles", "睾丸"],["foreskin", "包皮"],["bulge", "股間の膨らみ"],["cameltoe", "スジ（割れ目）"],["cleft of venus", "割れ目（スジまん）"],["inverted nipples", "陥没乳首"],["fat mons", "恥丘のふくらみ"],["clitoris", "クリトリス"],["erect clitoris", "勃起したクリトリス"],["uterus", "子宮"],["cervix", "子宮口"],["pregnant", "妊娠"],["fertilization", "受精表現"],["ovum", "卵子"],["x-ray", "断面図・透視"],["internal cumshot", "体内射精の断面"]],
+    "場所・背景": [["indoors", "屋内"],["outdoors", "屋外"],["bedroom", "寝室"],["on bed", "ベッドの上"],["bed", "ベッド"],["classroom", "教室"],["bathroom", "風呂・洗面"],["pool", "プール"],["beach", "ビーチ"],["night", "夜"],["onsen", "温泉"],["forest", "森"]],
+    "品質": [["masterpiece", "最高品質（公式プレフィックス）"],["best quality", "高品質（公式プレフィックス）"],["score_7", "品質スコア7（Anima では score_7 と書く）"],["safe", "全年齢（安全タグ）"],["sensitive", "センシティブ（安全タグ）"],["nsfw", "NSFW（安全タグ）"],["explicit", "露骨（安全タグ）"]]
+  };
+  var GENERAL_CAT = {};
+  Object.keys(GENERAL_PALETTE).forEach(function (cat) {
+    GENERAL_PALETTE[cat].forEach(function (pair) { GENERAL_CAT[pair[0]] = cat; });
+  });
+
   // ---------- token Japanese glosses ----------
   // Display-only aid for the edit modal: chips show a small Japanese
   // gloss under the English token so it can be judged at a glance.
@@ -2105,6 +2131,9 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     ['quality', '品質'], ['color', '色'], ['solid', 'ベタ'], ['blue', '青い'], ['sparkling', '輝く'],
     ['ribbon', 'リボン'], ['wearing', '着用'], ['neck', '首']
   ];
+  Object.keys(GENERAL_PALETTE).forEach(function (cat) {
+    GENERAL_PALETTE[cat].forEach(function (pair) { if (!TOKEN_JA[pair[0]]) TOKEN_JA[pair[0]] = pair[1]; });
+  });
   var glossPartsSorted = null;
   function tokenJa(tok) {
     var raw = String(tok == null ? '' : tok).trim();
@@ -2146,6 +2175,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
   // prompt-maker idea, stocked from the user's actual library).
   var genItem = null;
   var genPaletteCache = null;
+  var genPalSource = 'lib';
   function paletteByCategory() {
     var counts = {};
     var loraStats = {};
@@ -2196,13 +2226,31 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     renderGenBlocks();
     renderGenPalette();
   }
+  function fillGenPalCats(prefer) {
+    var cats;
+    if (genPalSource === 'gen') {
+      cats = BLOCK_ORDER.filter(function (c) { return (GENERAL_PALETTE[c] || []).length; });
+    } else {
+      if (!genPaletteCache) genPaletteCache = paletteByCategory();
+      cats = BLOCK_ORDER.filter(function (c) { return (genPaletteCache[c] || []).length; });
+    }
+    $('genPalCat').innerHTML = cats.map(function (c) { return '<option value="' + esc(c) + '">' + esc(c) + '</option>'; }).join('');
+    if (prefer && cats.indexOf(prefer) !== -1) $('genPalCat').value = prefer;
+  }
   function renderGenPalette() {
-    if (!genPaletteCache) genPaletteCache = paletteByCategory();
     var cat = $('genPalCat').value;
     var present = new Set($('genPositive').value.toLowerCase().split(',').map(function (s) { return s.trim(); }));
-    var chips = (genPaletteCache[cat] || []).filter(function (t) { return !present.has(t.toLowerCase()); }).slice(0, 12);
-    $('genPalChips').innerHTML = chips.length ? chips.map(function (t) {
-      return '<button type="button" class="block-token" data-gen-add="' + esc(t) + '"><span class="tok-main">+ ' + esc(t) + '</span>' + (tokenJa(t) ? '<span class="tok-ja">' + esc(tokenJa(t)) + '</span>' : '') + '</button>';
+    var list;
+    if (genPalSource === 'gen') {
+      list = (GENERAL_PALETTE[cat] || []).filter(function (p) { return !present.has(p[0].toLowerCase()); })
+        .slice(0, 12).map(function (p) { return { token: p[0], ja: p[1] }; });
+    } else {
+      if (!genPaletteCache) genPaletteCache = paletteByCategory();
+      list = (genPaletteCache[cat] || []).filter(function (t) { return !present.has(t.toLowerCase()); })
+        .slice(0, 12).map(function (t) { return { token: t, ja: tokenJa(t) }; });
+    }
+    $('genPalChips').innerHTML = list.length ? list.map(function (e) {
+      return '<button type="button" class="block-token" data-gen-add="' + esc(e.token) + '"><span class="tok-main">+ ' + esc(e.token) + '</span>' + (e.ja ? '<span class="tok-ja">' + esc(e.ja) + '</span>' : '') + '</button>';
     }).join('') : '<span class="side-note">候補なし</span>';
     $('genPalChips').querySelectorAll('[data-gen-add]').forEach(function (b) {
       b.addEventListener('click', function () {
@@ -2227,11 +2275,9 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     $('genMeta').textContent = '元seed: ' + (item.seed != null && item.seed !== '' ? item.seed : 'なし') + (w && h ? ' ／ サイズ: ' + w + 'x' + h + '（継承）' : '');
     $('genStatus').textContent = '';
     $('genResult').hidden = true;
-    if (!genPaletteCache) genPaletteCache = paletteByCategory();
-    var cats = BLOCK_ORDER.filter(function (c) { return (genPaletteCache[c] || []).length; });
-    if ((genPaletteCache['LoRA'] || []).length && cats.indexOf('LoRA') === -1) cats.push('LoRA');
-    $('genPalCat').innerHTML = cats.map(function (c) { return '<option value="' + esc(c) + '">' + esc(c) + '</option>'; }).join('');
-    if (cats.indexOf('衣装') !== -1) $('genPalCat').value = '衣装';
+    genPalSource = 'lib';
+    $('genPalSrc').value = 'lib';
+    fillGenPalCats('衣装');
     renderGenBlocks();
     renderGenPalette();
     $('genView').hidden = false;
@@ -2271,7 +2317,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
   // blocks. Character tokens are matched against the detected
   // characters' name tokens; the rest reuse the tag-browser categories.
   // The stored prompt and the parsers are not touched.
-  var BLOCK_ORDER = ['キャラ', '人数・主体', '髪', '目', '衣装', '表情・ポーズ', '場所・背景', '品質', 'LoRA', 'その他'];
+  var BLOCK_ORDER = ['キャラ', '人数・主体', '髪', '目', '衣装', '行為', '体位', '表情', '体液', '場所・背景', '品質', 'LoRA', 'その他'];
   var detailBlocks = [];
   function promptBlocks(item) {
     var tokens = (item.positive || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
@@ -2302,7 +2348,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       return '<div class="block-group"><div class="block-head"><h4>' + esc(g.name) + '</h4>' +
         '<button class="btn btn-small" type="button" data-block-copy="' + gi + '">コピー</button></div>' +
         '<div class="block-tokens">' + g.tokens.map(function (t) {
-          return '<button type="button" class="block-token" data-block-token="' + chipHtml(t, false) + '" title="このトークンで検索">' + esc(t) + '</button>';
+          return '<button type="button" class="block-token" data-block-token="' + esc(t) + '" title="このトークンで検索">' + chipHtml(t, false) + '</button>';
         }).join('') + '</div></div>';
     }).join('');
   }
@@ -2391,9 +2437,16 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     ['目', /eye/],
     ['衣装', /dress|skirt|uniform|swimsuit|cloth|shirt|jacket|hoodie|kimono|maid|bikini|socks|shoes|hat|ribbon|glove|earring|jewel|necklace|apron|coat|pants|boots|tie|turtleneck|sweater/],
     ['場所・背景', /background|sky|indoor|outdoor|night|city|room|bed|school|pool|beach|sunset|forest|street|window|water/],
-    ['表情・ポーズ', /smile|blush|mouth|looking|standing|sitting|lying|pose|arms|legs|hand|face|tears|sweat|tongue/]
+    ['体液', /cum|semen|ejaculat|precum|pussy juice|lactation/],
+    ['体位', /position|doggystyle|doggy style|missionary|mating press|from behind|cowgirl|prone bone|spooning|sixty nine/],
+    ['行為', /sex|fellatio|blowjob|handjob|footjob|paizuri|cunnilingus|masturbat|penetrat|fingering|licking|sucking|kiss|facesitting|rimming|tribadism/],
+    ['表情', /smile|blush|mouth|looking|standing|sitting|lying|pose|arms|legs|hand|face|tongue|sweat|tears|saliva|drool|expression|orgasm|aroused|embarrass|breathing/]
   ];
   function tagCategory(t) {
+    var gk = String(t).trim().toLowerCase();
+    if (GENERAL_CAT[gk]) return GENERAL_CAT[gk];
+    var gs = gk.replace(/_/g, ' ');
+    if (gs !== gk && GENERAL_CAT[gs]) return GENERAL_CAT[gs];
     for (var i = 0; i < TAG_CATEGORY_RULES.length; i++) {
       var rule = TAG_CATEGORY_RULES[i][1];
       if (typeof rule === 'function' ? rule(t) : rule.test(t)) return TAG_CATEGORY_RULES[i][0];
@@ -3627,6 +3680,11 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     $('genView').addEventListener('click', function (e) { if (e.target === $('genView')) closeGenEditor(); });
     $('genDoBtn').addEventListener('click', function () { genGenerate(); });
     $('genPalCat').addEventListener('change', function () { renderGenPalette(); });
+    $('genPalSrc').addEventListener('change', function () {
+      genPalSource = $('genPalSrc').value;
+      fillGenPalCats($('genPalCat').value);
+      renderGenPalette();
+    });
     var genInputTimer = 0;
     $('genPositive').addEventListener('input', function () {
       clearTimeout(genInputTimer);
