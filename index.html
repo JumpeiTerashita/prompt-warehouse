@@ -102,6 +102,8 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offs
 .compare-table th, .compare-table td { border-top: 1px solid var(--rule); padding: 4px var(--sp-1); text-align: left; vertical-align: top; overflow-wrap: anywhere; }
 .gen-panel { width: min(720px, 100%); max-height: 92vh; }
 .gen-body { -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+#genView .block-token { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 1px; text-align: left; }
+#genView .tok-ja { font-size: 11px; color: var(--muted); line-height: 1.3; }
 .gen-blocks { margin-bottom: var(--sp-2); }
 .gen-pal { margin: var(--sp-2) 0; }
 .gen-neg { margin: var(--sp-2) 0; }
@@ -1996,6 +1998,149 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     });
   }
 
+  // ---------- token Japanese glosses ----------
+  // Display-only aid for the edit modal: chips show a small Japanese
+  // gloss under the English token so it can be judged at a glance.
+  // The prompt text itself stays English everywhere. The dictionary
+  // covers this library's frequent tokens exactly, plus a parts table
+  // for compositional glossing of unseen phrases; tokens with no
+  // confident gloss show no gloss rather than a wrong one.
+  var TOKEN_JA = {
+    'masterpiece': '最高品質', 'best quality': '高品質', 'amazing quality': '驚くほどの品質', 'very aesthetic': '美的',
+    'absurdres': '超高解像度', 'absurd res': '超高解像度', 'highres': '高解像度', 'newest': '最新版',
+    'ultra fine details': '極めて細密', 'very detailed': '非常に詳細', 'japanese anime': '日本のアニメ',
+    'anime screenshot': 'アニメのスクショ', 'anime coloring': 'アニメ塗り', 'flat color': 'フラットカラー',
+    'photography': '写真風', 'single image': '1枚絵', 'vertical composition': '縦構図',
+    'dutch angle': '斜め構図', 'dynamic angle': 'ダイナミックな角度', 'a single solid color': '単色ベタ',
+    'a single solid dark color': '暗い単色ベタ', 'dark background': '暗い背景', 'anime': 'アニメ',
+    'thin black lines on the sleeves': '袖の細い黒ライン',
+    '1girl': '女の子1人', '1boy': '男1人', 'solo': 'ソロ', 'hetero': '男女',
+    'faceless male': '顔なし男性', 'faceless': '顔なし', 'muscular man': '筋肉質な男性',
+    'one muscular man with short black hair': '短い黒髪の筋肉質な男性1人',
+    'the man has short black hair and is muscular': '男は短い黒髪で筋肉質',
+    'the man has short black hair': '男は短い黒髪',
+    'his face is out of frame or turned away': '彼の顔はフレーム外か背けている',
+    'fair skin': '色白の肌', 'pale skin': '青白い肌', 'shiny skin': 'つや肌', 'gleaming skin': '輝く肌', 'wet skin': '濡れた肌',
+    'sweat': '汗', 'profuse sweat': '大量の汗', 'sweat drops on her skin': '肌の汗の滴', 'steaming breath': '湯気のような息',
+    'trembling': '震え', 'slim': '細身', 'slender': 'スレンダー', 'slender body': 'スレンダーな体',
+    'tall slender adult woman': '長身で細身の成人女性', 'tall woman': '長身の女性', 'adult woman': '成人女性',
+    'mature female': '成熟した女性', '6.5 heads tall': '6.5頭身', '25 years old': '25歳',
+    'narrow waist': '細い腰', 'wide hips': '広いヒップ', 'large butt': '大きなお尻', 'large ass': '大きなお尻',
+    'small breasts': '小さい胸', 'flat chest': '平らな胸', 'bare breasts': '裸の胸', 'exposed nipples': '露出した乳首',
+    'breasts exposed': '胸が露出', 'beautiful face': '美しい顔', 'gentle face': '優しい顔', 'kind eyes': '優しい目', 'sharp eyes': '鋭い目',
+    'wavy hair': 'ウェーブ髪', 'messy hair': '乱れた髪', 'disheveled hair': '乱れた髪',
+    'hair between eyes': '目の間の髪', 'long strand of hair between the eyes': '目の間に垂れる長い髪束',
+    'center parted bangs': 'センター分け前髪', 'center part bangs': 'センター分け前髪',
+    'plum hair': 'プラム色の髪', 'dark reddish purple hair': '暗い赤紫の髪', 'reddish purple hair': '赤紫の髪',
+    'she is reddish purple hair': '彼女は赤紫の髪', 'magenta plum wavy medium hair': 'マゼンタプラムのウェーブ・ミディアム髪',
+    'magenta plum hair': 'マゼンタプラムの髪', 'voluminous wavy hair with large curls': '大きなカールのボリュームあるウェーブ髪',
+    'loose wavy hair ends': 'ゆるくウェーブした毛先', 'face-framing strands': '顔周りの髪束',
+    'mostly straight hair': 'ほぼストレートの髪', 'side-swept bangs': '横流し前髪', 'side-parted bangs': '横分け前髪',
+    'asymmetrical hair': 'アシンメトリーな髪', 'glossy hair': 'つややかな髪', 'single-color hair': '単色の髪',
+    'deep garnet red hair': '深いガーネットレッドの髪', 'burgundy purple hair': 'バーガンディパープルの髪',
+    'wine-colored garnet hair': 'ワイン色のガーネット髪', 'dark purple hair': '暗い紫の髪',
+    'short hair': 'ショートヘア', 'medium hair': 'ミディアムヘア', 'long hair': 'ロングヘア', 'very long hair': 'とても長い髪',
+    'low side ponytail hanging down in front of her left shoulder and in front of her chest': '左肩と胸の前に垂れる低いサイドポニーテール',
+    'long bangs': '長い前髪',
+    'red eyes': '赤い目', 'large detailed red gradient eyes': '大きく詳細な赤いグラデーションの目',
+    'detailed eyes': '詳細な目', 'perfect eyes': '完璧な目', 'beautiful eyes': '美しい目',
+    'thick upper eyelashes': '濃い上まつ毛', 'eyelashes': 'まつ毛', 'half-closed eyes': '半開きの目',
+    'blush': '照れ（頬染め）', 'heavy blush': '強い照れ', 'looking at viewer': 'こちらを見ている', 'looking at the viewer': 'こちらを見ている',
+    'eye_contact': 'アイコンタクト', 'smile': '笑顔', 'open mouth': '口を開けている', 'mouth open': '口が開いている',
+    'saliva': 'よだれ', 'torogao': 'トロ顔', 'orgasm face': '絶頂顔', 'orgasm': '絶頂', 'sexual climax': '性的絶頂', 'aroused': '興奮している',
+    'only one mole': 'ほくろは1つだけ', "mole on the viewer's left side": '見る側の左側のほくろ', 'on her right cheek': '彼女の右頬',
+    'small beauty mole below the left corner of her mouth': '口元左下の小さなほくろ',
+    'a single small mole below the left corner of her mouth': '口元左下の小さなほくろ1つ',
+    'a single mole below the left corner of her mouth as seen by the viewer': '見る側から口元左下のほくろ1つ',
+    'nude': 'ヌード', 'completely nude': '全裸', 'upper body': '上半身', 'full body': '全身',
+    'cowboy shot': 'カウボーイショット（膝上）', 'close-up': 'クローズアップ', 'from below': '下から', 'from front': '正面から',
+    'pov': 'POV（一人称視点）', 'standing': '立ち', 'on bed': 'ベッドの上',
+    'sex': 'セックス', 'vaginal': '膣（挿入）', 'vaginal sex': '膣セックス', 'sex from behind': '後ろからセックス',
+    'standing sex': '立ちセックス', 'cowgirl position': '騎乗位', 'penetration visible': '挿入が見えている',
+    'cum in pussy': '膣内射精', 'spread legs': '開脚', 'bare shoulders': '裸の肩', 'barefoot': '裸足', 'long sleeves': '長袖',
+    'nsfw': 'NSFW（成人向け）', 'explicit': '露骨（成人向け）', 'uncensored': '無修正',
+    'bar censor': '棒モザイク', 'mosaic censor': 'モザイク', 'red obijime cord': '赤い帯締め',
+    'more purple than red': '赤より紫寄り', 'original characters': 'オリジナルキャラ', 'original character': 'オリジナルキャラ',
+    'the girl is sazae girl': '女の子はサザエガール', 'sazae girl': 'サザエガール',
+    'an open white jacket slipping off her shoulders': '肩から滑り落ちる開いた白ジャケット',
+    'wearing a black sleeveless turtleneck crop top lifted up to expose her breasts': '胸を露出するよう持ち上げた黒ノースリーブ・タートルネックのクロップトップ着用',
+    'on a mat by a pool outdoors': '屋外プール脇のマットの上', 'motion lines': '動き線（効果線）',
+    'no red cord anywhere else': '他に赤い紐なし', 'no red cord touches the man': '赤い紐は男に触れていない',
+    'large red cord knot at the nape': 'うなじの大きな赤い紐結び',
+    'the ponytail rests against the front of her body': 'ポニーテールが体の前に寄りかかっている',
+    'short cord ends lying along the hair': '髪に沿う短い紐の端',
+    'the second small tie a short distance below the first': '少し下の2つ目の小さい結び目',
+    'sunset': '夕日', 'night': '夜', 'classroom': '教室', 'school uniform': '制服', 'black turtleneck': '黒タートルネック',
+    'penis': 'ペニス', 'mole under mouth': '口の下のほくろ', '2girls': '女の子2人', 'mature face': '成熟した顔',
+    'voluminous hair': 'ボリュームある髪', 'teary eyes': '涙目', 'sensitive': '敏感',
+    'her arms around his neck': '彼女の腕が彼の首に回っている', 'smooth hair on top': 'トップは滑らかな髪',
+    'loose large waves': 'ゆるい大きなウェーブ', 'soft curls': '柔らかいカール',
+    'voluminous curls at the ends': '毛先のボリュームあるカール', 'two long loose spiral sidelocks': '長いゆるい螺旋サイドロック2本',
+    'face-framing hair': '顔周りの髪', 'midriff': 'お腹の露出', 'creampie': '中出し',
+    'the main girl is reddish purple hair': 'メインの女の子は赤紫の髪',
+    'parted lips': '少し開いた唇', 'the girl is garnet': '女の子はガーネット', 'an adult woman of 25': '25歳の成人女性',
+    'red gloves': '赤い手袋', 'cheerleader': 'チアリーダー',
+    'rooftop': '屋上', 'ballroom': 'ボールルーム（舞踏室）', 'garnet sutherland': 'ガーネット・サザーランド',
+    'wine-red dress': 'ワインレッドのドレス', 'deep garnet hair': '深いガーネット色の髪'
+  };
+  var GLOSS_PARTS = [
+    ['below the left corner of her mouth', '口元左下'], ['out of frame', 'フレーム外'], ['red cord', '赤い紐'],
+    ['beauty mole', 'ほくろ'], ['looking at viewer', 'こちらを見ている'], ['looking at the viewer', 'こちらを見ている'],
+    ['ponytail', 'ポニーテール'], ['eyelashes', 'まつ毛'], ['gradient', 'グラデーション'], ['between the eyes', '目の間'],
+    ['hair', '髪'], ['eyes', '目'], ['skin', '肌'], ['breasts', '胸'], ['mouth', '口'], ['face', '顔'], ['body', '体'],
+    ['shoulder', '肩'], ['shoulders', '肩'], ['chest', '胸'], ['waist', '腰'], ['hips', 'ヒップ'], ['butt', 'お尻'],
+    ['legs', '脚'], ['leg', '脚'], ['arms', '腕'], ['hands', '手'], ['cheek', '頬'], ['mole', 'ほくろ'],
+    ['bangs', '前髪'], ['strands', '髪束'], ['strand', '髪束'], ['cord', '紐'], ['knot', '結び目'],
+    ['dress', 'ドレス'], ['skirt', 'スカート'], ['jacket', 'ジャケット'], ['shirt', 'シャツ'], ['uniform', '制服'],
+    ['swimsuit', '水着'], ['sleeves', '袖'], ['pool', 'プール'], ['bed', 'ベッド'], ['mat', 'マット'],
+    ['red', '赤い'], ['purple', '紫'], ['dark', '暗い'], ['black', '黒'], ['white', '白'], ['pink', 'ピンク'],
+    ['short', '短い'], ['long', '長い'], ['small', '小さい'], ['large', '大きい'], ['big', '大きい'],
+    ['wavy', 'ウェーブ'], ['curly', 'カール'], ['straight', 'ストレート'], ['wet', '濡れた'], ['shiny', 'つや'],
+    ['beautiful', '美しい'], ['detailed', '詳細な'], ['thick', '濃い'], ['thin', '薄い'], ['slender', '細身'],
+    ['tall', '長身'], ['muscular', '筋肉質'], ['gentle', '優しい'], ['kind', '優しい'],
+    ['standing', '立ち'], ['sitting', '座り'], ['lying', '横たわり'], ['open', '開いた'], ['closed', '閉じた'],
+    ['spread', '開いた'], ['exposed', '露出した'], ['bare', '裸の'], ['completely', '完全に'], ['nude', '全裸'],
+    ['smile', '笑顔'], ['blush', '照れ'], ['sweat', '汗'], ['saliva', 'よだれ'],
+    ['woman', '女性'], ['women', '女性'], ['man', '男'], ['girl', '女の子'], ['boy', '男'], ['male', '男性'],
+    ['front', '前'], ['behind', '後ろ'], ['below', '下'], ['above', '上'], ['side', '横'], ['left', '左'], ['right', '右'],
+    ['corner', '隅'], ['single', '1つの'], ['only', 'だけ'], ['night', '夜'], ['outdoors', '屋外'],
+    ['sex', 'セックス'], ['position', '体位'], ['cowgirl', '騎乗位'], ['faceless', '顔なし'], ['turned away', '背けた'],
+    ['quality', '品質'], ['color', '色'], ['solid', 'ベタ'], ['blue', '青い'], ['sparkling', '輝く'],
+    ['ribbon', 'リボン'], ['wearing', '着用'], ['neck', '首']
+  ];
+  var glossPartsSorted = null;
+  function tokenJa(tok) {
+    var raw = String(tok == null ? '' : tok).trim();
+    if (!raw) return '';
+    if (raw.toLowerCase().indexOf('<lora:') === 0) return 'LoRA';
+    var norm = raw.replace(/[()\[\]]/g, '').replace(/:\s*[\d.]+\s*$/, '').trim().toLowerCase();
+    if (TOKEN_JA[norm]) return TOKEN_JA[norm];
+    if (!glossPartsSorted) glossPartsSorted = GLOSS_PARTS.slice().sort(function (a, b) { return b[0].length - a[0].length; });
+    var s = norm;
+    var letters = s.replace(/[^a-z0-9]/g, '').length;
+    if (!letters) return '';
+    var out = [];
+    var matched = 0;
+    var i = 0;
+    while (i < s.length) {
+      if (s[i] === ' ' || s[i] === ',') { i++; continue; }
+      var hit = null;
+      for (var k = 0; k < glossPartsSorted.length; k++) {
+        var en = glossPartsSorted[k][0];
+        if (s.indexOf(en, i) === i && (i + en.length >= s.length || s[i + en.length] === ' ')) { hit = glossPartsSorted[k]; break; }
+      }
+      if (hit) { out.push(hit[1]); matched += hit[0].replace(/[^a-z0-9]/g, '').length; i += hit[0].length; }
+      else { var j = s.indexOf(' ', i); if (j === -1) break; i = j + 1; }
+    }
+    if (out.length && matched / letters >= 0.55) return out.join('・');
+    return '';
+  }
+  function chipHtml(t, removable) {
+    var ja = tokenJa(t);
+    return '<span class="tok-main">' + esc(t) + (removable ? ' ×' : '') + '</span>' +
+      (ja ? '<span class="tok-ja">' + esc(ja) + '</span>' : '');
+  }
+
   // ---------- edit-and-generate modal ----------
   // The textarea is the source of truth. Chips are derived from it via
   // promptBlocks(); removing a chip edits the text, editing the text
@@ -2039,7 +2184,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     var blocks = promptBlocks(pseudo);
     $('genBlocks').innerHTML = blocks.length ? blocks.map(function (g) {
       return '<div class="block-group"><div class="block-head"><h4>' + esc(g.name) + '</h4></div><div class="block-tokens">' +
-        g.tokens.map(function (t) { return '<button type="button" class="block-token" data-gen-remove="' + esc(t) + '">' + esc(t) + ' ×</button>'; }).join('') + '</div></div>';
+        g.tokens.map(function (t) { return '<button type="button" class="block-token" data-gen-remove="' + esc(t) + '">' + chipHtml(t, true) + '</button>'; }).join('') + '</div></div>';
     }).join('') : '<p class="side-note">（トークンなし）</p>';
     $('genBlocks').querySelectorAll('[data-gen-remove]').forEach(function (b) {
       b.addEventListener('click', function () { removeGenToken(b.getAttribute('data-gen-remove')); });
@@ -2060,7 +2205,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     var present = new Set($('genPositive').value.toLowerCase().split(',').map(function (s) { return s.trim(); }));
     var chips = (genPaletteCache[cat] || []).filter(function (t) { return !present.has(t.toLowerCase()); }).slice(0, 12);
     $('genPalChips').innerHTML = chips.length ? chips.map(function (t) {
-      return '<button type="button" class="block-token" data-gen-add="' + esc(t) + '">+ ' + esc(t) + '</button>';
+      return '<button type="button" class="block-token" data-gen-add="' + esc(t) + '"><span class="tok-main">+ ' + esc(t) + '</span>' + (tokenJa(t) ? '<span class="tok-ja">' + esc(tokenJa(t)) + '</span>' : '') + '</button>';
     }).join('') : '<span class="side-note">候補なし</span>';
     $('genPalChips').querySelectorAll('[data-gen-add]').forEach(function (b) {
       b.addEventListener('click', function () {
