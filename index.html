@@ -100,6 +100,20 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offs
 .compare-item h3 { font-size: var(--fs-small); margin: var(--sp-1) 0; overflow-wrap: anywhere; }
 .compare-table { width: 100%; border-collapse: collapse; font-size: var(--fs-small); margin-top: var(--sp-3); }
 .compare-table th, .compare-table td { border-top: 1px solid var(--rule); padding: 4px var(--sp-1); text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.gen-panel { width: min(720px, 100%); max-height: 92vh; overflow-y: auto; }
+.gen-blocks { margin-bottom: var(--sp-2); }
+.gen-pal { margin: var(--sp-2) 0; }
+.gen-neg { margin: var(--sp-2) 0; }
+.gen-neg summary { cursor: pointer; font-size: var(--fs-small); color: var(--muted); margin-bottom: 4px; }
+.gen-neg textarea { width: 100%; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface); padding: 8px; color: var(--text); font-size: 16px; }
+.gen-row { display: flex; align-items: flex-end; gap: var(--sp-3); flex-wrap: wrap; margin: var(--sp-2) 0; }
+#genDoBtn { width: 100%; min-height: 44px; }
+.gen-result { margin-top: var(--sp-2); }
+.gen-result img { width: 100%; border-radius: var(--radius-control); display: block; }
+@media (max-width: 760px) {
+  #genView { align-items: flex-end; padding: 0; }
+  #genView .gen-panel { width: 100%; max-height: 94vh; border-radius: 16px 16px 0 0; }
+}
 .compare-table tr.is-diff { background: var(--accent-soft); }
 .diff-tokens { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 var(--sp-2); }
 .diff-token { border-radius: 999px; padding: var(--sp-0) 8px; font-size: var(--fs-small); overflow-wrap: anywhere; }
@@ -487,7 +501,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
         <button id="downloadWorkflowBtn" class="btn" type="button">workflow.json</button>
         <button id="favBtn" class="btn" type="button"><svg class="star-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M12 2.5l2.95 6.35 6.95.82-5.13 4.73 1.38 6.85L12 17.77l-6.15 3.48 1.38-6.85L2.1 9.67l6.95-.82z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg> お気に入り</button>
         <button id="deleteBtn" class="btn btn-danger" type="button">削除</button>
-        <button id="regenSameBtn" class="btn" type="button">再生成（同じ条件）</button>
+        <button id="editGenBtn" class="btn" type="button">編集して生成</button>
         <button id="regenVarBtn" class="btn" type="button">バリエーション（別seed）</button>
         <button id="copyRequestBtn" class="btn" type="button">再生成リクエストをコピー</button>
       </div>
@@ -525,6 +539,29 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     </div>
   </aside>
 </div>
+
+<div id="genView" class="tag-browser" hidden role="dialog" aria-modal="true" aria-label="編集して生成">
+    <div class="tag-browser-panel gen-panel">
+      <div class="tag-browser-head"><h3>編集して生成</h3><button id="genClose" class="icon-btn" type="button" aria-label="閉じる">×</button></div>
+      <div id="genBlocks" class="gen-blocks"></div>
+      <label class="field"><span>プロンプト</span><textarea id="genPositive" rows="5"></textarea></label>
+      <div class="gen-pal">
+        <label class="field"><span>追加パレット（ライブラリの頻出トークン）</span><select id="genPalCat"></select></label>
+        <div class="block-tokens" id="genPalChips"></div>
+      </div>
+      <details class="gen-neg"><summary>ネガティブ</summary><textarea id="genNegative" rows="2"></textarea></details>
+      <div class="gen-row">
+        <label class="field"><span>seed</span><select id="genSeedMode"><option value="orig">元のseedを使う</option><option value="random">ランダム</option></select></label>
+        <span class="side-note" id="genMeta"></span>
+      </div>
+      <button id="genDoBtn" class="btn btn-primary" type="button">生成する</button>
+      <p class="side-note" id="genStatus" role="status"></p>
+      <div class="gen-result" id="genResult" hidden>
+        <img id="genResultImg" alt="生成結果">
+        <p class="side-note">倉庫に取り込みました。このまま直して再生成もできます。</p>
+      </div>
+    </div>
+  </div>
 
 <div id="compareView" class="tag-browser" hidden>
   <div class="tag-browser-panel compare-panel" role="dialog" aria-label="2件の比較">
@@ -1898,10 +1935,33 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     payload.request_id = 'pw-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
     return payload;
   }
-  function museconErrorToast(err) {
-    if (err && err.status === 502) toast('MuseConが起動していません（PC側で start_all.bat を実行してください）');
-    else if (err && (err.status === 401 || err.status === 403)) toast('APIキーが違うようです');
-    else toast('MuseConに届きませんでした（接続・CORS・PCの状態を確認してください）');
+  function museconErrorToast(err) { toast(museconErrorText(err)); }
+  function museconErrorText(err) {
+    if (err && err.status === 502) return 'MuseConが起動していません（PC側で start_all.bat を実行してください）';
+    if (err && (err.status === 401 || err.status === 403)) return 'APIキーが違うようです';
+    return 'MuseConに届きませんでした（接続・CORS・PCの状態を確認してください）';
+  }
+  function museconPost(payload) {
+    var cfg = museconConfig();
+    var ctrl = new AbortController();
+    var timer = setTimeout(function () { ctrl.abort(); }, 700000);
+    return fetch(cfg.url + '/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + cfg.key },
+      body: JSON.stringify(payload),
+      signal: ctrl.signal
+    }).then(function (r) {
+      clearTimeout(timer);
+      if (!r.ok) { var e = new Error('http'); e.status = r.status; throw e; }
+      return r.json();
+    }).catch(function (err) { clearTimeout(timer); throw err; });
+  }
+  function museconImportBody(body, payload) {
+    var bin = atob(body.image_base64);
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    var file = new File([bytes], 'musecon_' + (body.filename || (payload.request_id + '.png')), { type: 'image/png' });
+    importFiles([file]);
   }
   function museconGenerate(item, vary) {
     var cfg = museconConfig();
@@ -1909,28 +1969,10 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     if (!item.positive) { toast('プロンプトがないので再生成できません'); return; }
     var payload = museconPayload(item, vary);
     toast('MuseConで生成中です（数十秒かかります）');
-    var ctrl = new AbortController();
-    var timer = setTimeout(function () { ctrl.abort(); }, 700000);
-    fetch(cfg.url + '/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + cfg.key },
-      body: JSON.stringify(payload),
-      signal: ctrl.signal
-    }).then(function (r) {
-      if (!r.ok) { var e = new Error('http'); e.status = r.status; throw e; }
-      return r.json();
-    }).then(function (body) {
-      clearTimeout(timer);
+    museconPost(payload).then(function (body) {
       if (!body || !body.image_base64) { toast('生成結果に画像が含まれていませんでした'); return; }
-      var bin = atob(body.image_base64);
-      var bytes = new Uint8Array(bin.length);
-      for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      var file = new File([bytes], 'musecon_' + (body.filename || (payload.request_id + '.png')), { type: 'image/png' });
-      importFiles([file]);
-    }).catch(function (err) {
-      clearTimeout(timer);
-      museconErrorToast(err);
-    });
+      museconImportBody(body, payload);
+    }).catch(function (err) { museconErrorToast(err); });
   }
   function museconTest() {
     var cfg = museconConfig();
@@ -1948,6 +1990,129 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       status.textContent = err && err.status === 502 ? 'MuseConが起動していません（PC側で start_all.bat）'
         : (err && (err.status === 401 || err.status === 403)) ? 'APIキーが違うようです'
         : '届きませんでした（URL・ネットワーク・CORSを確認）';
+    });
+  }
+
+  // ---------- edit-and-generate modal ----------
+  // The textarea is the source of truth. Chips are derived from it via
+  // promptBlocks(); removing a chip edits the text, editing the text
+  // re-derives the chips, and palette chips append to the text. The
+  // palette is the library's own frequent tokens per category (the
+  // prompt-maker idea, stocked from the user's actual library).
+  var genItem = null;
+  var genPaletteCache = null;
+  function paletteByCategory() {
+    var counts = {};
+    var loraStats = {};
+    state.items.forEach(function (it) {
+      (it.positive || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean).forEach(function (tok) {
+        if (tok.toLowerCase().indexOf('<lora:') === 0) return;
+        var cat = tagCategory(tok);
+        counts[cat] = counts[cat] || {};
+        var e = counts[cat][tok.toLowerCase()] || (counts[cat][tok.toLowerCase()] = { count: 0, form: tok });
+        e.count++;
+      });
+      (it.loras || []).forEach(function (l) {
+        var s = loraStats[l.name] || (loraStats[l.name] = { count: 0, str: {} });
+        s.count++;
+        var st = l.strengthModel != null ? String(l.strengthModel) : '1';
+        s.str[st] = (s.str[st] || 0) + 1;
+      });
+    });
+    var out = {};
+    Object.keys(counts).forEach(function (cat) {
+      out[cat] = Object.keys(counts[cat]).map(function (k) { return counts[cat][k]; })
+        .sort(function (a, b) { return b.count - a.count; }).slice(0, 12).map(function (e) { return e.form; });
+    });
+    var loraList = Object.keys(loraStats).sort(function (a, b) { return loraStats[b].count - loraStats[a].count; }).slice(0, 12).map(function (name) {
+      var best = Object.keys(loraStats[name].str).sort(function (a, b) { return loraStats[name].str[b] - loraStats[name].str[a]; })[0];
+      return '<lora:' + name + ':' + best + '>';
+    });
+    if (loraList.length) out['LoRA'] = loraList;
+    return out;
+  }
+  function renderGenBlocks() {
+    var pseudo = Object.assign({}, genItem, { positive: $('genPositive').value });
+    var blocks = promptBlocks(pseudo);
+    $('genBlocks').innerHTML = blocks.length ? blocks.map(function (g) {
+      return '<div class="block-group"><div class="block-head"><h4>' + esc(g.name) + '</h4></div><div class="block-tokens">' +
+        g.tokens.map(function (t) { return '<button type="button" class="block-token" data-gen-remove="' + esc(t) + '">' + esc(t) + ' ×</button>'; }).join('') + '</div></div>';
+    }).join('') : '<p class="side-note">（トークンなし）</p>';
+    $('genBlocks').querySelectorAll('[data-gen-remove]').forEach(function (b) {
+      b.addEventListener('click', function () { removeGenToken(b.getAttribute('data-gen-remove')); });
+    });
+  }
+  function removeGenToken(tok) {
+    var parts = $('genPositive').value.split(',').map(function (s) { return s.trim(); });
+    var idx = parts.indexOf(tok);
+    if (idx === -1) return;
+    parts.splice(idx, 1);
+    $('genPositive').value = parts.filter(Boolean).join(', ');
+    renderGenBlocks();
+    renderGenPalette();
+  }
+  function renderGenPalette() {
+    if (!genPaletteCache) genPaletteCache = paletteByCategory();
+    var cat = $('genPalCat').value;
+    var present = new Set($('genPositive').value.toLowerCase().split(',').map(function (s) { return s.trim(); }));
+    var chips = (genPaletteCache[cat] || []).filter(function (t) { return !present.has(t.toLowerCase()); }).slice(0, 12);
+    $('genPalChips').innerHTML = chips.length ? chips.map(function (t) {
+      return '<button type="button" class="block-token" data-gen-add="' + esc(t) + '">+ ' + esc(t) + '</button>';
+    }).join('') : '<span class="side-note">候補なし</span>';
+    $('genPalChips').querySelectorAll('[data-gen-add]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var t = b.getAttribute('data-gen-add');
+        var cur = $('genPositive').value.replace(/\s+$/, '');
+        $('genPositive').value = cur ? cur + ', ' + t : t;
+        renderGenBlocks();
+        renderGenPalette();
+      });
+    });
+  }
+  function openGenEditor() {
+    var item = currentItem();
+    if (!item) return;
+    genItem = item;
+    genPaletteCache = null;
+    $('genPositive').value = item.positive || '';
+    $('genNegative').value = item.negative || '';
+    $('genSeedMode').value = 'orig';
+    var w = item.latentWidth || item.width, h = item.latentHeight || item.height;
+    $('genMeta').textContent = '元seed: ' + (item.seed != null && item.seed !== '' ? item.seed : 'なし') + (w && h ? ' ／ サイズ: ' + w + 'x' + h + '（継承）' : '');
+    $('genStatus').textContent = '';
+    $('genResult').hidden = true;
+    if (!genPaletteCache) genPaletteCache = paletteByCategory();
+    var cats = BLOCK_ORDER.filter(function (c) { return (genPaletteCache[c] || []).length; });
+    if ((genPaletteCache['LoRA'] || []).length && cats.indexOf('LoRA') === -1) cats.push('LoRA');
+    $('genPalCat').innerHTML = cats.map(function (c) { return '<option value="' + esc(c) + '">' + esc(c) + '</option>'; }).join('');
+    if (cats.indexOf('衣装') !== -1) $('genPalCat').value = '衣装';
+    renderGenBlocks();
+    renderGenPalette();
+    $('genView').hidden = false;
+  }
+  function closeGenEditor() { $('genView').hidden = true; }
+  function genGenerate() {
+    var cfg = museconConfig();
+    if (!cfg.key) { $('genStatus').textContent = '先にサイドバーの「MuseCon連携」でAPIキーを設定してください'; return; }
+    var pos = $('genPositive').value.trim();
+    if (!pos) { $('genStatus').textContent = 'プロンプトが空です'; return; }
+    var payload = museconPayload(genItem, $('genSeedMode').value === 'random');
+    payload.prompt = pos;
+    var neg = $('genNegative').value.trim();
+    if (neg) payload.negative_prompt = neg; else delete payload.negative_prompt;
+    var btn = $('genDoBtn');
+    btn.disabled = true;
+    $('genStatus').textContent = '生成中です（数十秒かかります）';
+    museconPost(payload).then(function (body) {
+      btn.disabled = false;
+      if (!body || !body.image_base64) { $('genStatus').textContent = '生成結果に画像が含まれていませんでした'; return; }
+      $('genResultImg').src = 'data:image/png;base64,' + body.image_base64;
+      $('genResult').hidden = false;
+      museconImportBody(body, payload);
+      $('genStatus').textContent = '生成できました（seed: ' + (body.seed != null ? body.seed : (payload.seed != null ? payload.seed : '不明')) + '）';
+    }).catch(function (err) {
+      btn.disabled = false;
+      $('genStatus').textContent = museconErrorText(err);
     });
   }
 
@@ -3308,7 +3473,16 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       } catch (e) { toast('保存できませんでした'); }
     });
     $('museconTestBtn').addEventListener('click', function () { museconTest(); });
-    $('regenSameBtn').addEventListener('click', function () { var item = currentItem(); if (item) museconGenerate(item, false); });
+    $('editGenBtn').addEventListener('click', function () { openGenEditor(); });
+    $('genClose').addEventListener('click', function () { closeGenEditor(); });
+    $('genView').addEventListener('click', function (e) { if (e.target === $('genView')) closeGenEditor(); });
+    $('genDoBtn').addEventListener('click', function () { genGenerate(); });
+    $('genPalCat').addEventListener('change', function () { renderGenPalette(); });
+    var genInputTimer = 0;
+    $('genPositive').addEventListener('input', function () {
+      clearTimeout(genInputTimer);
+      genInputTimer = setTimeout(function () { renderGenBlocks(); renderGenPalette(); }, 250);
+    });
     $('regenVarBtn').addEventListener('click', function () { var item = currentItem(); if (item) museconGenerate(item, true); });
     $('copyRequestBtn').addEventListener('click', function () {
       var item = currentItem(); if (!item) return;
