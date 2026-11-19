@@ -236,6 +236,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
 .gen-info { display: grid; grid-template-columns: 96px 1fr; row-gap: 4px; margin: 0; font-size: var(--fs-small); }
 .gen-info dt { color: var(--muted); }
 .gen-info dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.gen-info a { color: var(--accent-ink); text-decoration: underline; overflow-wrap: anywhere; }
 .unconnected-list { margin: 0; padding-left: var(--sp-4); color: var(--muted); font-size: var(--fs-small); }
 .save-btn { width: 100%; }
 
@@ -515,6 +516,8 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       <label class="field"><span>タイトル</span><input id="editTitle" type="text"></label>
       <label class="field"><span>タグ（カンマ区切り）</span><input id="editTags" type="text"></label>
       <label class="field"><span>メモ</span><textarea id="editMemo" rows="2"></textarea></label>
+      <label class="field"><span>出所</span><input id="editSource" type="text" placeholder="例: X @user"></label>
+      <label class="field"><span>出所URL</span><input id="editSourceUrl" type="url" placeholder="https://..."></label>
 
       <div class="prompt-block">
         <div class="prompt-head"><h3>ブロック分解（自動分類）</h3><button class="btn btn-small" id="copyBlocksAllBtn" type="button">全文コピー</button></div>
@@ -935,6 +938,30 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     return result;
   }
 
+  function splitParams(tail) {
+    var parts = [], cur = '', inQuote = false, escNext = false;
+    for (var i = 0; i < tail.length; i++) {
+      var ch = tail.charAt(i);
+      if (escNext) {
+        cur += ch;
+        escNext = false;
+      } else if (ch === '\\' && inQuote) {
+        cur += ch;
+        escNext = true;
+      } else if (ch === '"') {
+        inQuote = !inQuote;
+        cur += ch;
+      } else if (ch === ',' && !inQuote) {
+        parts.push(cur);
+        cur = '';
+      } else {
+        cur += ch;
+      }
+    }
+    parts.push(cur);
+    return parts;
+  }
+
   function parseA1111(parameters) {
     var result = { sourceFormat: 'a1111', positive: '', negative: '', params: {}, rawParameters: parameters };
     var negMarker = '\nNegative prompt: ';
@@ -959,7 +986,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     }
     result.positive = head;
     result.negative = negText;
-    tail.split(',').forEach(function (part) {
+    splitParams(tail).forEach(function (part) {
       var c = part.indexOf(':');
       if (c !== -1) result.params[part.substring(0, c).trim()] = part.substring(c + 1).trim();
     });
@@ -1147,7 +1174,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
   var FOLDER_NAME = 'prompt-warehouse';
   var appMode = 'local'; // 'local' | 'drive'
   var driveItemsCache = [];
-  var drive = { token: null, tokenExp: 0, folderId: null, indexId: null, fileIds: {}, fullIdsByHash: Object.create(null), thumbIdsByHash: Object.create(null), ready: false, client: null, batchDepth: 0, lastIndexJson: '', pendingAuth: null, indexMd5: null, indexGeneration: 0, lastUploadMd5: null, conflict: false };
+  var drive = { token: null, tokenExp: 0, folderId: null, indexId: null, fileIds: {}, fullIdsByHash: Object.create(null), thumbIdsByHash: Object.create(null), pendingDeletes: [], lastAuthToastAt: 0, ready: false, client: null, batchDepth: 0, lastIndexJson: '', pendingAuth: null, indexMd5: null, indexGeneration: 0, lastUploadMd5: null, conflict: false };
   var remoteUrlInflight = Object.create(null);
   function driveIndexFileName(name, id) {
     drive.fileIds[name] = id;
@@ -1262,13 +1289,44 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     }
     return promise;
   }
+  function drivePromptReSignIn() {
+    var now = Date.now();
+    if (now - drive.lastAuthToastAt < 3000) return;
+    drive.lastAuthToastAt = now;
+    toast('Googleドライブの認証が切れました', {
+      label: '再サインイン',
+      fn: function () {
+        driveEnsureToken(true).then(function () {
+          if (!drive.ready) {
+            return driveSetup().then(function (items) {
+              state.items = items.slice();
+              bumpDataVersion();
+              render();
+              toast('Googleドライブに接続しました');
+            });
+          }
+          updateDriveUi();
+          render();
+          toast('Googleドライブに再接続しました');
+        }).catch(function (err) {
+          toast('ドライブ接続に失敗しました: ' + (err && err.message || err));
+        });
+      }
+    });
+  }
   function driveApi(path, opts) {
     opts = opts || {};
     var headers = Object.assign({}, opts.headers || {});
     headers['Authorization'] = 'Bearer ' + drive.token;
     opts.headers = headers;
     return fetch('https://www.googleapis.com/drive/v3/' + path, opts).then(function (res) {
-      if (res.status === 401) { drive.token = null; updateDriveUi(); throw new Error('ドライブの認証が切れました'); }
+      if (res.status === 401) {
+        drive.token = null;
+        drive.tokenExp = 0;
+        updateDriveUi();
+        drivePromptReSignIn();
+        throw new Error('ドライブの認証が切れました');
+      }
       if (!res.ok) throw new Error('Drive API error ' + res.status);
       return res;
     });
@@ -1364,7 +1422,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     });
   }
   function driveFlushIndex(force) {
-    if (!drive.ready) return Promise.resolve();
+    if (!drive.ready) return Promise.resolve(true);
     function doUpload() {
       drive.indexGeneration = (drive.indexGeneration || 0) + 1;
       var payload = JSON.stringify({ app: 'prompt-warehouse', version: 2, generation: drive.indexGeneration, updatedAt: new Date().toISOString(), items: driveLightweightItems() });
@@ -1373,6 +1431,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
         drive.indexId = id;
         if (drive.lastUploadMd5) drive.indexMd5 = drive.lastUploadMd5;
         drive.conflict = false;
+        return true;
       });
     }
     // Optimistic concurrency: if the index file changed since we loaded
@@ -1382,14 +1441,23 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     // human-readable ordering both writers maintain.
     if (!drive.indexId || !drive.indexMd5 || force) return doUpload();
     return driveIndexMeta().then(function (meta) {
-      if (meta && meta.md5Checksum && meta.md5Checksum !== drive.indexMd5) {
+      if (!meta || !meta.md5Checksum) {
+        driveSetStatus('索引の確認に失敗しました');
+        toast('ドライブ索引の確認に失敗したため、上書きを中止しました');
+        return false;
+      }
+      if (meta.md5Checksum !== drive.indexMd5) {
         drive.conflict = true;
         driveSetStatus('索引の競合を検出しました');
         var ok = window.confirm('ドライブの索引が、別のタブや直接登録ツールによって更新されています。\nこのまま保存すると、そちらの変更を上書きします。保存しますか？\n（キャンセルすると保存を止めます。ページを再読み込みすると相手の内容を取り込めます）');
-        if (!ok) { toast('索引の保存を止めました（競合を検出）'); return null; }
+        if (!ok) { toast('索引の保存を止めました（競合を検出）'); return false; }
       }
       return doUpload();
-    }).catch(function () { return doUpload(); });
+    }).catch(function () {
+      driveSetStatus('索引の確認に失敗しました');
+      toast('ドライブ索引の確認に失敗したため、上書きを中止しました');
+      return false;
+    });
   }
   function drivePutItem(item) {
     var existing = driveItemsCache.findIndex(function (i) { return i.id === item.id; });
@@ -1419,9 +1487,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       if (drive.batchDepth === 0) return driveFlushIndex();
     });
   }
-  function driveDeleteItem(id) {
-    var item = driveItemsCache.find(function (i) { return i.id === id; });
-    driveItemsCache = driveItemsCache.filter(function (i) { return i.id !== id; });
+  function driveDeleteFilesForItem(item) {
     var steps = Promise.resolve();
     if (item && item.fileHash) {
       var prefix = item.fileHash + '.';
@@ -1435,8 +1501,41 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
         }
       });
     }
-    return steps.then(function () {
-      if (drive.batchDepth === 0) return driveFlushIndex();
+    return steps;
+  }
+  function driveDrainPendingDeletes() {
+    var pending = drive.pendingDeletes.splice(0);
+    var steps = Promise.resolve();
+    pending.forEach(function (entry) {
+      steps = steps.then(function () { return driveDeleteFilesForItem(entry.item); });
+    });
+    return steps;
+  }
+  function driveRollbackPendingDeletes() {
+    var pending = drive.pendingDeletes.splice(0);
+    for (var i = pending.length - 1; i >= 0; i--) {
+      var entry = pending[i];
+      if (!driveItemsCache.some(function (x) { return x.id === entry.item.id; })) {
+        driveItemsCache.splice(Math.min(entry.index, driveItemsCache.length), 0, entry.item);
+      }
+    }
+  }
+  function driveDeleteItem(id) {
+    var idxPos = driveItemsCache.findIndex(function (i) { return i.id === id; });
+    var item = idxPos !== -1 ? driveItemsCache[idxPos] : null;
+    if (idxPos !== -1) driveItemsCache.splice(idxPos, 1);
+    if (drive.batchDepth > 0) {
+      if (item) drive.pendingDeletes.push({ item: item, index: idxPos });
+      return Promise.resolve(true);
+    }
+    // Always update the index before deleting remote image files so an
+    // aborted or failed index flush never leaves dangling index entries.
+    return driveFlushIndex().then(function (ok) {
+      if (!ok) {
+        if (item) driveItemsCache.splice(Math.min(idxPos, driveItemsCache.length), 0, item);
+        return false;
+      }
+      return driveDeleteFilesForItem(item).then(function () { return true; });
     });
   }
   function driveRemoteFileId(item, kind) {
@@ -1680,8 +1779,17 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     for (var i = 0; i < b.length; i += 97) { h ^= b[i]; h = (h * 0x01000193) >>> 0; }
     return 'fnv-' + h.toString(16) + '-' + buffer.byteLength;
   }
+  function decodeImageBitmap(blob) {
+    try {
+      return createImageBitmap(blob, { imageOrientation: 'from-image' }).catch(function () {
+        return createImageBitmap(blob);
+      });
+    } catch (e) {
+      return createImageBitmap(blob);
+    }
+  }
   function makeThumbnail(blob) {
-    return createImageBitmap(blob).then(function (bmp) {
+    return decodeImageBitmap(blob).then(function (bmp) {
       var scale = Math.min(1, 480 / Math.max(bmp.width, bmp.height));
       var w = Math.max(1, Math.round(bmp.width * scale));
       var h = Math.max(1, Math.round(bmp.height * scale));
@@ -1695,7 +1803,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     }).catch(function () { return null; });
   }
   function imageSize(blob) {
-    return createImageBitmap(blob).then(function (bmp) {
+    return decodeImageBitmap(blob).then(function (bmp) {
       var s = { width: bmp.width, height: bmp.height };
       bmp.close();
       return s;
@@ -2089,6 +2197,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
   }
   function museconGenerate(item, vary) {
     var cfg = museconConfig();
+    if (!cfg.url) { toast('先にサイドバーの「MuseCon連携」で接続先URLを設定してください'); return; }
     if (!cfg.key) { toast('先にサイドバーの「MuseCon連携」でAPIキーを設定してください'); return; }
     if (!item.positive) { toast('プロンプトがないので再生成できません'); return; }
     var payload = museconPayload(item, vary);
@@ -2101,6 +2210,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
   function museconTest() {
     var cfg = museconConfig();
     var status = $('museconStatus');
+    if (!cfg.url) { status.textContent = '接続先URLが未設定です'; return; }
     if (!cfg.key) { status.textContent = 'APIキーが未設定です'; return; }
     status.textContent = '接続テスト中...';
     fetch(cfg.url + '/health', { headers: { 'Authorization': 'Bearer ' + cfg.key } }).then(function (r) {
@@ -2406,6 +2516,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
   function closeGenEditor() { $('genView').hidden = true; }
   function genGenerate() {
     var cfg = museconConfig();
+    if (!cfg.url) { $('genStatus').textContent = '先にサイドバーの「MuseCon連携」で接続先URLを設定してください'; return; }
     if (!cfg.key) { $('genStatus').textContent = '先にサイドバーの「MuseCon連携」でAPIキーを設定してください'; return; }
     var pos = $('genPositive').value.trim();
     if (!pos) { $('genStatus').textContent = 'プロンプトが空です'; return; }
@@ -2675,8 +2786,21 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       return chain;
     }).then(function () {
       drive.batchDepth--;
-      if (appMode === 'drive' && drive.batchDepth === 0) return driveFlushIndex().catch(function () {});
-    }).then(function () {
+      if (appMode === 'drive' && drive.batchDepth === 0) {
+        return driveFlushIndex().then(function (ok) {
+          if (!ok) {
+            driveRollbackPendingDeletes();
+            return false;
+          }
+          return driveDrainPendingDeletes().then(function () { return true; });
+        }).catch(function () {
+          driveRollbackPendingDeletes();
+          return false;
+        });
+      }
+      return true;
+    }).then(function (ok) {
+      if (ok === false) return;
       var ids = new Set(snapshots.map(function (s) { return s.item.id; }));
       snapshots.forEach(function (s) { releaseItemUrls(s.item.id); });
       state.items = state.items.filter(function (i) { return !ids.has(i.id); });
@@ -2722,7 +2846,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
   function searchHayOf(item) {
     var cached = searchHayCache.get(item);
     if (cached !== undefined) return cached;
-    var hay = [item.positive, item.negative, item.title, item.memo, item.model, item.fileName,
+    var hay = [item.positive, item.negative, item.title, item.memo, item.source || '', item.sourceUrl || '', item.model, item.fileName,
       item.seed != null ? String(item.seed) : '', item.sampler || '', item.scheduler || '',
       item.sourceFormat || '',
       item.steps != null ? String(item.steps) : '', item.cfg != null ? String(item.cfg) : '',
@@ -2891,9 +3015,11 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     var grid = $('grid');
     grid.className = 'grid' + (state.thumbFit === 'contain' ? ' fit-contain' : '');
     grid.innerHTML = '';
+    var frag = document.createDocumentFragment();
     list.slice(0, state.shown).forEach(function (item) {
       var card = document.createElement('article');
       card.className = 'card' + (item.id === state.selectedId ? ' is-selected' : '') + (state.selectMode && state.selectedIds.has(item.id) ? ' is-checked' : '');
+      card.setAttribute('data-card-id', item.id);
       var thumbUrl = getImageUrl(item, 'thumb');
       var remoteThumb = (!thumbUrl && appMode === 'drive' && item.fileHash) ? item.id + '|thumb' : null;
       var title = item.title || item.fileName || '（タイトルなし）';
@@ -2916,58 +3042,12 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       card.tabIndex = 0;
       card.setAttribute('role', 'button');
       card.setAttribute('aria-label', title + ' を開く');
-      card.addEventListener('keydown', function (ev) {
-        if (ev.target !== card) return;
-        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); openViewer(item.id); }
-      });
-      card.addEventListener('click', function (ev) {
-        if (state.selectMode) {
-          if (state.selectedIds.has(item.id)) state.selectedIds.delete(item.id); else state.selectedIds.add(item.id);
-          var on = state.selectedIds.has(item.id);
-          card.classList.toggle('is-checked', on);
-          var chk = card.querySelector('.bulk-check');
-          if (chk) chk.innerHTML = on ? CHECK_SVG : '';
-          renderBulkBar();
-          return;
-        }
-        if (ev.target.closest('[data-fav]')) return;
-        var tagBtn = ev.target.closest('[data-tag]');
-        if (tagBtn) { toggleTag(tagBtn.getAttribute('data-tag')); return; }
-        var charaBtn = ev.target.closest('[data-chara]');
-        if (charaBtn) {
-          state.chara = charaBtn.getAttribute('data-chara');
-          state.shown = PAGE;
-          charaOptionsSig = null;
-          syncHash();
-          render();
-          return;
-        }
-        var searchBtn = ev.target.closest('[data-search]');
-        if (searchBtn) {
-          state.query = searchBtn.getAttribute('data-search');
-          $('searchInput').value = state.query;
-          state.shown = PAGE;
-          render();
-          return;
-        }
-        openViewer(item.id);
-      });
-      grid.appendChild(card);
+      frag.appendChild(card);
     });
+    grid.appendChild(frag);
     $('moreBtn').hidden = list.length <= state.shown;
     hydrateRemoteImages(grid);
 
-    grid.querySelectorAll('[data-fav]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var item = state.items.find(function (i) { return i.id === btn.getAttribute('data-fav'); });
-        if (!item) return;
-        item.favorite = !item.favorite;
-        item.updatedAt = Date.now();
-        bumpDataVersion();
-        dbPut(item).then(render);
-        if (state.selectedId === item.id) syncDetailFav(item);
-      });
-    });
     tagUl.querySelectorAll('[data-tag]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var t = btn.getAttribute('data-tag');
@@ -3025,8 +3105,19 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     if (item.latentWidth) add('生成サイズ', item.latentWidth + '×' + item.latentHeight);
     if (item.width) add('画像サイズ', item.width + '×' + item.height);
     if (item.isImg2Img) add('方式', 'img2img');
+    add('出所', item.source);
+    add('出所URL', item.sourceUrl);
     add('登録日', fmtDate(item.createdAt));
     return rows;
+  }
+  function renderGenInfo(item) {
+    $('genInfo').innerHTML = genInfoRows(item).map(function (r) {
+      var val = String(r[1]);
+      var dd = (r[0] === '出所URL' && /^https?:\/\//i.test(val))
+        ? '<a href="' + esc(val) + '" target="_blank" rel="noopener noreferrer">' + esc(val) + '</a>'
+        : esc(val);
+      return '<dt>' + esc(r[0]) + '</dt><dd>' + dd + '</dd>';
+    }).join('');
   }
   function fullText(item) {
     var lines = [];
@@ -3069,15 +3160,15 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     $('editTitle').value = item.title || '';
     $('editTags').value = (item.tags || []).join(', ');
     $('editMemo').value = item.memo || '';
+    $('editSource').value = item.source || '';
+    $('editSourceUrl').value = item.sourceUrl || '';
     $('editPositive').value = item.positive || '';
     $('editPositiveWrap').open = (item.sourceFormat === 'template' || !item.positive);
     renderPromptBlocks(item);
     renderSimilar(item);
     $('editNegative').value = item.negative || '';
     syncDetailFav(item);
-    $('genInfo').innerHTML = genInfoRows(item).map(function (r) {
-      return '<dt>' + esc(r[0]) + '</dt><dd>' + esc(r[1]) + '</dd>';
-    }).join('');
+    renderGenInfo(item);
     var unc = item.unconnected || [];
     $('unconnectedWrap').hidden = unc.length === 0;
     $('unconnectedList').innerHTML = unc.map(function (u) { return '<li>' + esc(u) + '</li>'; }).join('');
@@ -3461,15 +3552,23 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       $('viewerFavBtn').textContent = item.favorite ? 'お気に入り済み' : 'お気に入り';
     });
     document.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape') {
+        if (!$('tagBrowser').hidden) { closeTagBrowser(); return; }
+        if (!$('compareView').hidden) { closeCompare(); return; }
+        if (!$('genView').hidden) { closeGenEditor(); return; }
+        if (lightbox.open) { closeLightbox(); return; }
+        if (viewer.open) { closeViewer(); return; }
+        if (!$('detail').hidden) { closeDetail(); return; }
+        return;
+      }
+      if (!$('tagBrowser').hidden || !$('compareView').hidden || !$('genView').hidden) return;
       if (lightbox.open) {
-        if (ev.key === 'Escape') closeLightbox();
-        else if (ev.key === 'ArrowLeft') lightboxNav(-1);
+        if (ev.key === 'ArrowLeft') lightboxNav(-1);
         else if (ev.key === 'ArrowRight') lightboxNav(1);
         return;
       }
       if (!viewer.open) return;
-      if (ev.key === 'Escape') closeViewer();
-      else if (ev.key === 'ArrowLeft') viewerGoTo(viewerIndex() - 1);
+      if (ev.key === 'ArrowLeft') viewerGoTo(viewerIndex() - 1);
       else if (ev.key === 'ArrowRight') viewerGoTo(viewerIndex() + 1);
     });
     window.addEventListener('resize', function () { if (viewer.open) { viewerMeasure(); viewerPaint(); } });
@@ -3699,6 +3798,59 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
   // ---------- events ----------
   function bind() {
     bindViewer();
+    var grid = $('grid');
+    grid.addEventListener('keydown', function (ev) {
+      var card = ev.target;
+      if (!card || !card.classList || !card.classList.contains('card')) return;
+      var id = card.getAttribute('data-card-id');
+      if (!id) return;
+      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); openViewer(id); }
+    });
+    grid.addEventListener('click', function (ev) {
+      var card = ev.target && ev.target.closest ? ev.target.closest('.card[data-card-id]') : null;
+      if (!card) return;
+      var id = card.getAttribute('data-card-id');
+      if (state.selectMode) {
+        if (state.selectedIds.has(id)) state.selectedIds.delete(id); else state.selectedIds.add(id);
+        var on = state.selectedIds.has(id);
+        card.classList.toggle('is-checked', on);
+        var chk = card.querySelector('.bulk-check');
+        if (chk) chk.innerHTML = on ? CHECK_SVG : '';
+        renderBulkBar();
+        return;
+      }
+      var favBtn = ev.target.closest('[data-fav]');
+      if (favBtn) {
+        var item = state.items.find(function (i) { return i.id === favBtn.getAttribute('data-fav'); });
+        if (!item) return;
+        item.favorite = !item.favorite;
+        item.updatedAt = Date.now();
+        bumpDataVersion();
+        dbPut(item).then(render);
+        if (state.selectedId === item.id) syncDetailFav(item);
+        return;
+      }
+      var tagBtn = ev.target.closest('[data-tag]');
+      if (tagBtn) { toggleTag(tagBtn.getAttribute('data-tag')); return; }
+      var charaBtn = ev.target.closest('[data-chara]');
+      if (charaBtn) {
+        state.chara = charaBtn.getAttribute('data-chara');
+        state.shown = PAGE;
+        charaOptionsSig = null;
+        syncHash();
+        render();
+        return;
+      }
+      var searchBtn = ev.target.closest('[data-search]');
+      if (searchBtn) {
+        state.query = searchBtn.getAttribute('data-search');
+        $('searchInput').value = state.query;
+        state.shown = PAGE;
+        render();
+        return;
+      }
+      openViewer(id);
+    });
     $('importBtn').addEventListener('click', function () { $('fileInput').click(); });
     $('emptyImportBtn').addEventListener('click', function () { $('fileInput').click(); });
     $('fileInput').addEventListener('change', function () { importFiles(this.files); this.value = ''; });
@@ -3953,7 +4105,8 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
           if (blobs[1]) snapshot.thumbBlob = blobs[1];
         });
       }
-      prepare.then(function () { return dbDelete(item.id); }).then(function () {
+      prepare.then(function () { return dbDelete(item.id); }).then(function (ok) {
+        if (ok === false) return;
         releaseItemUrls(item.id);
         state.items = state.items.filter(function (i) { return i.id !== item.id; });
         bumpDataVersion();
@@ -3995,7 +4148,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       var item = currentItem(); if (!item || !item.workflowJson) return;
       download((item.fileName || 'workflow').replace(/\.png$/i, '') + '-workflow.json', new Blob([item.workflowJson], { type: 'application/json' }));
     });
-    ['editTitle', 'editTags', 'editMemo', 'editPositive', 'editNegative'].forEach(function (fid) {
+    ['editTitle', 'editTags', 'editMemo', 'editSource', 'editSourceUrl', 'editPositive', 'editNegative'].forEach(function (fid) {
       $(fid).addEventListener('input', function () { if (state.selectedId) detailDirty = true; });
     });
     window.addEventListener('beforeunload', function (ev) {
@@ -4006,6 +4159,10 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       item.title = $('editTitle').value.trim();
       item.tags = $('editTags').value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
       item.memo = $('editMemo').value;
+      var src = $('editSource').value.trim();
+      if (src) item.source = src; else delete item.source;
+      var srcUrl = $('editSourceUrl').value.trim();
+      if (srcUrl) item.sourceUrl = srcUrl; else delete item.sourceUrl;
       item.positive = $('editPositive').value;
       item.negative = $('editNegative').value;
       var auto = PW.normalizeAutoTags(item.positive);
@@ -4029,9 +4186,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
         });
         renderPromptBlocks(item);
         renderSimilar(item);
-        $('genInfo').innerHTML = genInfoRows(item).map(function (r) {
-          return '<dt>' + esc(r[0]) + '</dt><dd>' + esc(r[1]) + '</dd>';
-        }).join('');
+        renderGenInfo(item);
         toast('保存しました');
         render();
       });
