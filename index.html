@@ -1174,8 +1174,11 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
   var FOLDER_NAME = 'prompt-warehouse';
   var appMode = 'local'; // 'local' | 'drive'
   var driveItemsCache = [];
-  var drive = { token: null, tokenExp: 0, folderId: null, indexId: null, fileIds: {}, fullIdsByHash: Object.create(null), thumbIdsByHash: Object.create(null), pendingDeletes: [], lastAuthToastAt: 0, ready: false, client: null, batchDepth: 0, lastIndexJson: '', pendingAuth: null, indexMd5: null, indexGeneration: 0, lastUploadMd5: null, conflict: false };
+  var drive = { token: null, tokenExp: 0, folderId: null, indexId: null, fileIds: {}, fullIdsByHash: Object.create(null), thumbIdsByHash: Object.create(null), metaIdsByHash: Object.create(null), pendingDeletes: [], lastAuthToastAt: 0, ready: false, client: null, batchDepth: 0, lastIndexJson: '', pendingAuth: null, indexMd5: null, indexGeneration: 0, lastUploadMd5: null, conflict: false };
   var remoteUrlInflight = Object.create(null);
+  var META_FIELDS = ['workflowJson', 'promptJson', 'rawParameters'];
+  var itemMetaCache = Object.create(null);
+  var itemMetaInflight = Object.create(null);
   function driveIndexFileName(name, id) {
     drive.fileIds[name] = id;
     if (name === INDEX_NAME) return;
@@ -1183,8 +1186,12 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       drive.thumbIdsByHash[name.slice(0, -11)] = id;
       return;
     }
+    if (name.length > 10 && name.slice(-10) === '.meta.json') {
+      drive.metaIdsByHash[name.slice(0, -10)] = id;
+      return;
+    }
     var dot = name.indexOf('.');
-    if (dot > 0 && name.indexOf('.thumb.') === -1) {
+    if (dot > 0 && name.indexOf('.thumb.') === -1 && name.indexOf('.meta.') === -1) {
       drive.fullIdsByHash[name.slice(0, dot)] = id;
     }
   }
@@ -1196,8 +1203,13 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       if (drive.thumbIdsByHash[thHash] === oldId) delete drive.thumbIdsByHash[thHash];
       return;
     }
+    if (name.length > 10 && name.slice(-10) === '.meta.json') {
+      var mHash = name.slice(0, -10);
+      if (drive.metaIdsByHash[mHash] === oldId) delete drive.metaIdsByHash[mHash];
+      return;
+    }
     var dot = name.indexOf('.');
-    if (dot > 0 && name.indexOf('.thumb.') === -1) {
+    if (dot > 0 && name.indexOf('.thumb.') === -1 && name.indexOf('.meta.') === -1) {
       var hash = name.slice(0, dot);
       if (drive.fullIdsByHash[hash] === oldId) delete drive.fullIdsByHash[hash];
     }
@@ -1364,6 +1376,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       var ids = {};
       var fullByHash = Object.create(null);
       var thumbByHash = Object.create(null);
+      var metaByHash = Object.create(null);
       var pageToken = null;
       var q = "'" + folderId + "' in parents and trashed=false";
       function next() {
@@ -1376,8 +1389,12 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
               thumbByHash[f.name.slice(0, -11)] = f.id;
               return;
             }
+            if (f.name.length > 10 && f.name.slice(-10) === '.meta.json') {
+              metaByHash[f.name.slice(0, -10)] = f.id;
+              return;
+            }
             var dot = f.name.indexOf('.');
-            if (dot > 0 && f.name.indexOf('.thumb.') === -1) {
+            if (dot > 0 && f.name.indexOf('.thumb.') === -1 && f.name.indexOf('.meta.') === -1) {
               fullByHash[f.name.slice(0, dot)] = f.id;
             }
           });
@@ -1385,6 +1402,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
           drive.fileIds = ids;
           drive.fullIdsByHash = fullByHash;
           drive.thumbIdsByHash = thumbByHash;
+          drive.metaIdsByHash = metaByHash;
           return ids;
         });
       }
@@ -1417,7 +1435,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
   function driveLightweightItems() {
     return driveItemsCache.map(function (item) {
       var copy = Object.assign({}, item);
-      delete copy.imageBlob; delete copy.thumbBlob;
+      delete copy.imageBlob; delete copy.thumbBlob; delete copy._restoreMeta;
       return copy;
     });
   }
@@ -1478,12 +1496,21 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
         return driveUpload(thName, thBlob, drive.fileIds[thName] || null).then(function () { uploadedThumb = true; });
       });
     }
+    var uploadedMeta = false;
+    if (item._restoreMeta && item.fileHash) {
+      var metaName = item.fileHash + '.meta.json';
+      var metaBlob = new Blob([JSON.stringify(item._restoreMeta)], { type: 'application/json' });
+      steps = steps.then(function () {
+        return driveUpload(metaName, metaBlob, drive.fileIds[metaName] || null).then(function () { uploadedMeta = true; });
+      });
+    }
     return steps.then(function () {
       if (uploadedThumb && item.thumbBlob && !getCachedUrl(item.id, 'thumb')) {
         setCachedUrl(item.id, 'thumb', URL.createObjectURL(item.thumbBlob));
       }
       if (uploadedImage) item.imageBlob = null;
       if (uploadedThumb) item.thumbBlob = null;
+      if (uploadedMeta) delete item._restoreMeta;
       if (drive.batchDepth === 0) return driveFlushIndex();
     });
   }
@@ -1541,7 +1568,84 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
   function driveRemoteFileId(item, kind) {
     if (!item.fileHash) return null;
     if (kind === 'thumb') return drive.thumbIdsByHash[item.fileHash] || drive.fileIds[item.fileHash + '.thumb.webp'] || null;
+    if (kind === 'meta') return drive.metaIdsByHash[item.fileHash] || drive.fileIds[item.fileHash + '.meta.json'] || null;
     return drive.fullIdsByHash[item.fileHash] || null;
+  }
+  function getInlineMeta(item) {
+    var out = {};
+    if (!item) return out;
+    META_FIELDS.forEach(function (k) {
+      if (item[k] != null && item[k] !== '') out[k] = item[k];
+    });
+    return out;
+  }
+  function getCachedMetaField(item, field) {
+    if (!item) return null;
+    if (item[field] != null && item[field] !== '') return item[field];
+    if (item.hasMeta && item.fileHash && itemMetaCache[item.fileHash]) {
+      var val = itemMetaCache[item.fileHash][field];
+      if (val != null && val !== '') return val;
+    }
+    return null;
+  }
+  function driveFindMetaFileId(fileHash) {
+    var fid = driveRemoteFileId({ fileHash: fileHash }, 'meta');
+    if (fid) return Promise.resolve(fid);
+    if (!drive.folderId) return Promise.resolve(null);
+    var name = fileHash + '.meta.json';
+    var q = "'" + drive.folderId + "' in parents and trashed=false and name='" + name.replace(/'/g, "\\'") + "'";
+    return driveApi('files?fields=files(id,name)&pageSize=1&q=' + encodeURIComponent(q))
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var f = data && data.files && data.files[0];
+        if (!f) return null;
+        driveIndexFileName(f.name, f.id);
+        return f.id;
+      });
+  }
+  // Resolve the three heavy metadata fields (workflowJson, promptJson,
+  // rawParameters) for an item. Inline fields on the item always win
+  // (legacy format); otherwise, when hasMeta is set in Drive mode, fetch
+  // `<fileHash>.meta.json` on demand and cache it in memory without
+  // mutating the index item object.
+  function loadItemMeta(item) {
+    if (!item) return Promise.resolve({});
+    var inline = getInlineMeta(item);
+    if (!item.hasMeta || !item.fileHash || appMode !== 'drive') {
+      return Promise.resolve(inline);
+    }
+    var hash = item.fileHash;
+    if (itemMetaCache[hash]) {
+      return Promise.resolve(Object.assign({}, itemMetaCache[hash], inline));
+    }
+    var p = itemMetaInflight[hash];
+    if (!p) {
+      p = driveEnsureToken(false).then(function () {
+        return driveFindMetaFileId(hash);
+      }).then(function (fid) {
+        if (!fid) return {};
+        return driveApi('files/' + fid + '?alt=media').then(function (r) { return r.json(); }).then(function (raw) {
+          var meta = {};
+          if (raw && typeof raw === 'object') {
+            META_FIELDS.forEach(function (k) {
+              if (raw[k] != null && raw[k] !== '') meta[k] = raw[k];
+            });
+          }
+          itemMetaCache[hash] = meta;
+          return meta;
+        });
+      }).then(function (meta) {
+        delete itemMetaInflight[hash];
+        return meta;
+      }, function (err) {
+        delete itemMetaInflight[hash];
+        throw err;
+      });
+      itemMetaInflight[hash] = p;
+    }
+    return p.then(function (meta) {
+      return Object.assign({}, meta, inline);
+    });
   }
   function ensureRemoteUrl(item, kind) {
     var cached = getCachedUrl(item.id, kind);
@@ -2769,11 +2873,17 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
           .then(function (r) { return r.blob(); }).catch(function () { return null; });
       };
       snapshots.forEach(function (s) {
-        if (s.item.fileHash && !s.item.imageBlob) {
+        if (s.item.fileHash && (!s.item.imageBlob || s.item.hasMeta)) {
           prepare = prepare.then(function () {
-            return Promise.all([fetchBlob(s.item, 'full'), fetchBlob(s.item, 'thumb')]).then(function (blobs) {
-              if (blobs[0]) s.item.imageBlob = blobs[0];
-              if (blobs[1]) s.item.thumbBlob = blobs[1];
+            var tasks = [
+              !s.item.imageBlob ? fetchBlob(s.item, 'full') : Promise.resolve(null),
+              !s.item.imageBlob ? fetchBlob(s.item, 'thumb') : Promise.resolve(null),
+              s.item.hasMeta ? loadItemMeta(s.item).catch(function () { return null; }) : Promise.resolve(null)
+            ];
+            return Promise.all(tasks).then(function (res) {
+              if (res[0]) s.item.imageBlob = res[0];
+              if (res[1]) s.item.thumbBlob = res[1];
+              if (res[2] && Object.keys(res[2]).length) s.item._restoreMeta = res[2];
             });
           });
         }
@@ -2800,7 +2910,7 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       }
       return true;
     }).then(function (ok) {
-      if (ok === false) return;
+      if (ok === false) { snapshots.forEach(function (s) { delete s.item._restoreMeta; }); return; }
       var ids = new Set(snapshots.map(function (s) { return s.item.id; }));
       snapshots.forEach(function (s) { releaseItemUrls(s.item.id); });
       state.items = state.items.filter(function (i) { return !ids.has(i.id); });
@@ -3172,7 +3282,16 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
     var unc = item.unconnected || [];
     $('unconnectedWrap').hidden = unc.length === 0;
     $('unconnectedList').innerHTML = unc.map(function (u) { return '<li>' + esc(u) + '</li>'; }).join('');
-    $('downloadWorkflowBtn').disabled = !item.workflowJson;
+    var wfNow = getCachedMetaField(item, 'workflowJson');
+    $('downloadWorkflowBtn').disabled = !wfNow;
+    if (!wfNow && item.hasMeta && appMode === 'drive' && item.fileHash) {
+      var detailItemId = item.id;
+      loadItemMeta(item).then(function (meta) {
+        if (state.selectedId === detailItemId && meta && meta.workflowJson) {
+          $('downloadWorkflowBtn').disabled = false;
+        }
+      }).catch(function () {});
+    }
     render();
   }
   function closeDetail(force) {
@@ -4093,20 +4212,25 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       // In Drive mode the cached item holds no image bytes; fetch them first so
       // an Undo can re-upload the files that the delete is about to remove.
       var prepare = Promise.resolve();
-      if (appMode === 'drive' && item.fileHash && !item.imageBlob) {
+      if (appMode === 'drive' && item.fileHash && (!item.imageBlob || item.hasMeta)) {
         var fetchBlob = function (kind) {
           var fid = driveRemoteFileId(item, kind);
           if (!fid) return Promise.resolve(null);
           return driveEnsureToken(false).then(function () { return driveApi('files/' + fid + '?alt=media'); })
             .then(function (r) { return r.blob(); }).catch(function () { return null; });
         };
-        prepare = Promise.all([fetchBlob('full'), fetchBlob('thumb')]).then(function (blobs) {
-          if (blobs[0]) snapshot.imageBlob = blobs[0];
-          if (blobs[1]) snapshot.thumbBlob = blobs[1];
+        prepare = Promise.all([
+          !item.imageBlob ? fetchBlob('full') : Promise.resolve(null),
+          !item.imageBlob ? fetchBlob('thumb') : Promise.resolve(null),
+          item.hasMeta ? loadItemMeta(item).catch(function () { return null; }) : Promise.resolve(null)
+        ]).then(function (res) {
+          if (res[0]) snapshot.imageBlob = res[0];
+          if (res[1]) snapshot.thumbBlob = res[1];
+          if (res[2] && Object.keys(res[2]).length) snapshot._restoreMeta = res[2];
         });
       }
       prepare.then(function () { return dbDelete(item.id); }).then(function (ok) {
-        if (ok === false) return;
+        if (ok === false) { delete snapshot._restoreMeta; return; }
         releaseItemUrls(item.id);
         state.items = state.items.filter(function (i) { return i.id !== item.id; });
         bumpDataVersion();
@@ -4145,8 +4269,22 @@ button.pill:hover { background: var(--accent-track); color: var(--accent-ink); }
       copyBlobToClipboard(item.imageBlob);
     });
     $('downloadWorkflowBtn').addEventListener('click', function () {
-      var item = currentItem(); if (!item || !item.workflowJson) return;
-      download((item.fileName || 'workflow').replace(/\.png$/i, '') + '-workflow.json', new Blob([item.workflowJson], { type: 'application/json' }));
+      var item = currentItem(); if (!item) return;
+      var wf = getCachedMetaField(item, 'workflowJson');
+      if (wf) {
+        download((item.fileName || 'workflow').replace(/\.png$/i, '') + '-workflow.json', new Blob([wf], { type: 'application/json' }));
+        return;
+      }
+      if (!item.hasMeta) return;
+      loadItemMeta(item).then(function (meta) {
+        if (!meta || !meta.workflowJson) {
+          toast('workflow.json が見つかりませんでした');
+          return;
+        }
+        download((item.fileName || 'workflow').replace(/\.png$/i, '') + '-workflow.json', new Blob([meta.workflowJson], { type: 'application/json' }));
+      }).catch(function () {
+        toast('メタデータの取得に失敗しました');
+      });
     });
     ['editTitle', 'editTags', 'editMemo', 'editSource', 'editSourceUrl', 'editPositive', 'editNegative'].forEach(function (fid) {
       $(fid).addEventListener('input', function () { if (state.selectedId) detailDirty = true; });
